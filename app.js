@@ -43,11 +43,15 @@ firebase.initializeApp({
 });
 
 var db = firebase.database();
+var quizzesObject = {};
+
+//QUEUE SECTION
 var ref = db.ref("/queue");
 var crtRoomID = 0 ;
 var waitMakeMatching = false;
 //Async call when a users enter in queue
 ref.on("value", function(snapshot) {
+    console.log("QUEUE Section Updated");
    var obj = snapshot.val();
    if(waitMakeMatching == false)
         makeMatching(obj);
@@ -86,9 +90,11 @@ function makeMatching(obj) {
             //Setting the new room with two users
             var roomRef = db.ref("/rooms");
             roomRef.child(crtRoomID).set({
-              player1: key1,
-              player2: key2,
-              gameStatus: "ToDo"
+              PLAYER1_ID: key1,
+              PLAYER2_ID: key2,
+              PLAYER1_STATUS: "waiting",
+              PLAYER2_STATUS: "waiting",
+              GAME_STATUS: "waitingForPlayers"
             });
 
             var userRef = db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
@@ -102,7 +108,41 @@ function makeMatching(obj) {
     }
 }
 
+//ROOMS SECTION
+var refRooms = db.ref("/rooms");
+refRooms.on("value", function(snapshot) {
+   console.log("ROOMS Section Updated");
+   var obj = snapshot.val();
+   findAndComputeRooms(obj);
+}, function (errorObject) {
+  console.log("The read failed: " + errorObject.code);
+});
 
+function findAndComputeRooms(obj) {
+    for(crt in obj){
+        //console.log(JSON.stringify(obj[crt].GAME_STATUS));
+
+        if(obj[crt].GAME_STATUS == "waitingForPlayers")
+            if(obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
+                var keys = Object.keys(quizzesObject);
+                var random = Math.floor(Math.random() * keys.length);
+                var chosenQuizz = keys[random];
+
+                //RUN THE GAME
+                var crtTime =  new Date().toLocaleString();
+                db.ref("/rooms").child(crt).update({"GAME_STATUS": "running", "GAME_QUIZZ" : String(chosenQuizz), "GAME_RUN_START": crtTime});
+            }
+    }
+}
+
+//QUIZZ SECTION
+var refRooms = db.ref("/quizzes");
+refRooms.on("value", function(snapshot) {
+   console.log("QUIZZ Section Updated");
+   quizzesObject = snapshot.val();
+}, function (errorObject) {
+  console.log("The read failed: " + errorObject.code);
+});
 
 
 
