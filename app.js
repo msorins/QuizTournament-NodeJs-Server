@@ -35,6 +35,9 @@ app.use('/users', users);
 
 
 
+
+
+
 //FIREBASE PORTION
 var firebase = require("firebase");
 firebase.initializeApp({
@@ -48,7 +51,7 @@ var quizzesObject = {};
 //QUEUE SECTION
 var ref = db.ref("/queue");
 var crtRoomID = 0 ;
-var waitMakeMatching = false;
+var waitMakeMatching = false, waitFindAndComputeRooms = false;
 //Async call when a users enter in queue
 ref.on("value", function(snapshot) {
     console.log("QUEUE Section Updated");
@@ -59,6 +62,7 @@ ref.on("value", function(snapshot) {
   console.log("The read failed: " + errorObject.code);
 });
 
+//Make ROOMS
 function makeMatching(obj) {
     if(obj != null){
         waitMakeMatching = true;
@@ -94,11 +98,12 @@ function makeMatching(obj) {
               PLAYER2_ID: key2,
               PLAYER1_STATUS: "waiting",
               PLAYER2_STATUS: "waiting",
-              GAME_STATUS: "waitingForPlayers"
+              GAME_STATUS: "waitingForPlayers",
+              GAME_ROUNDS: "0"
             });
 
-            var userRef = db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
-            var userRef = db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
+            db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
+            db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID)});
 
             nrOfQueueUsers -= 2;
             crtRoomID += 1;
@@ -113,36 +118,105 @@ var refRooms = db.ref("/rooms");
 refRooms.on("value", function(snapshot) {
    console.log("ROOMS Section Updated");
    var obj = snapshot.val();
-   findAndComputeRooms(obj);
+   if(!waitFindAndComputeRooms ) {
+        waitFindAndComputeRooms = true;
+        findAndComputeRooms(obj);
+   }
 }, function (errorObject) {
   console.log("The read failed: " + errorObject.code);
 });
 
 function findAndComputeRooms(obj) {
     for(crt in obj){
-        //console.log(JSON.stringify(obj[crt].GAME_STATUS));
-
+        //START THE GAME IF BOTH PLAYERS ARE READY
         if(obj[crt].GAME_STATUS == "waitingForPlayers")
             if(obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
-                var keys = Object.keys(quizzesObject);
-                var random = Math.floor(Math.random() * keys.length);
-                var chosenQuizz = keys[random];
-
-                //RUN THE GAME
-                var crtTime =  new Date().toLocaleString();
-                db.ref("/rooms").child(crt).update({"GAME_STATUS": "running", "GAME_QUIZZ" : String(chosenQuizz), "GAME_RUN_START": crtTime});
+                newQuizz(obj[crt], crt);
             }
+
+        //COMPUTE THE RESULTS IF BOTH PLAYER SUBMITTED THEM
+        if(obj[crt].GAME_STATUS == "running") {
+            if(obj[crt].PLAYER1_STATUS == "done" && obj[crt].PLAYER2_STATUS == "done") {
+                computeResult(obj[crt], crt);
+            }
+
+        }
     }
+
+  waitFindAndComputeRooms = false;
+}
+
+//SET UP A NEW QUIZZ WITH given ROOM id
+function newQuizz(obj, id) {
+    var keys = Object.keys(quizzesObject);
+    var random = Math.floor(Math.random() * keys.length);
+    var chosenQuizz = keys[random];
+    var gameRounds = parseInt(obj.GAME_ROUNDS)
+    console.log("quizzesObject:" + quizzesObject);
+    console.log("Keys: " + keys);
+    console.log("Chosen newQuizz: " +chosenQuizz);
+
+    //RUN THE GAME
+    var crtTime =  new Date().toLocaleString();
+    db.ref("/rooms").child(id).update({"GAME_STATUS": "running",
+                                       "GAME_QUIZZ" : String(chosenQuizz),
+                                       "GAME_RUN_START": crtTime,
+                                       "GAME_ROUNDS": String(gameRounds+1)});
+}
+
+//COMPUTE RESULTS OF CURRENT OBJECT WITH given ROOM id
+function computeResult(obj, id) {
+    console.log("computeResult: starting");
+    var refQuizz = db.ref("/quizzes/"+obj.GAME_QUIZZ);
+    //GET QUIZZ ANSWER
+    refQuizz.once("value", function(snapshot) {
+       var refQuizzObject = snapshot.val();
+
+       var answer = formatString(refQuizzObject.ANSWER);
+       var answerPlayer1 = formatString(obj.PLAYER1_RESULT);
+       var answerPlayer2 = formatString(obj.PLAYER2_RESULT);
+       var timerPlayer1 = parseFloat(obj.PLAYER1_TIMER);
+       var timerPlayer2 = parseFloat(obj.PLAYER2_TIMER);
+       var winnerId = 0;
+
+       //Choose the winner
+       if(answerPlayer1 == answerPlayer2 && answerPlayer1 == answer) {
+           if(timerPlayer1 > timerPlayer2)
+              winnerId = 1;
+           else
+              winnerId = 2;
+       } else {
+           if(answerPlayer1 == answer)
+                winnerId = 1;
+
+           if(answerPlayer2 == answer)
+                winnerId = 2;
+       }
+
+       db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "GAME_WINNER": winnerId});
+
+
+    }, function (errorObject) {
+      console.log("The read failed: " + errorObject.code);
+    });
+    console.log("computeResult:" + JSON.stringify(obj));
+}
+
+function formatString(str) {
+    return str.toLowerCase().trim().replace(" ", "");
 }
 
 //QUIZZ SECTION
-var refRooms = db.ref("/quizzes");
-refRooms.on("value", function(snapshot) {
+var refQuizzes = db.ref("/quizzes");
+refQuizzes.on("value", function(snapshot) {
    console.log("QUIZZ Section Updated");
    quizzesObject = snapshot.val();
 }, function (errorObject) {
   console.log("The read failed: " + errorObject.code);
 });
+
+
+
 
 
 
