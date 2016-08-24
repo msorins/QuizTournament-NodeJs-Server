@@ -98,8 +98,10 @@ function makeMatching(obj) {
               PLAYER2_ID: key2,
               PLAYER1_STATUS: "waiting",
               PLAYER2_STATUS: "waiting",
-              GAME_STATUS: "waitingForPlayers",
-              GAME_ROUNDS: "0"
+              PLAYER1_WINS: "0",
+              PLAYER2_WINS: "0",
+              GAME_ROUNDS: "0",
+              GAME_STATUS: "waitingForPlayers"
             });
 
             db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
@@ -128,16 +130,21 @@ refRooms.on("value", function(snapshot) {
 
 function findAndComputeRooms(obj) {
     for(crt in obj){
-        //START THE GAME IF BOTH PLAYERS ARE READY
+        //STEP1: WAITING
         if(obj[crt].GAME_STATUS == "waitingForPlayers")
-            if(obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
-                newQuizz(obj[crt], crt);
+            if(obj[crt].PLAYER1_STATUS == "connected" && obj[crt].PLAYER2_STATUS == "connected") {
+                quizzPreparing(obj[crt], crt);
             }
 
-        //COMPUTE THE RESULTS IF BOTH PLAYER SUBMITTED THEM
+        //STEP1: PREPARING
+        if(obj[crt].GAME_STATUS == "preparing")
+            if(obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
+                quizzReady(obj[crt], crt);
+            }
+        //STEP3: RUNNING
         if(obj[crt].GAME_STATUS == "running") {
             if(obj[crt].PLAYER1_STATUS == "done" && obj[crt].PLAYER2_STATUS == "done") {
-                computeResult(obj[crt], crt);
+                quizzRunning(obj[crt], crt);
             }
 
         }
@@ -146,26 +153,30 @@ function findAndComputeRooms(obj) {
   waitFindAndComputeRooms = false;
 }
 
-//SET UP A NEW QUIZZ WITH given ROOM id
-function newQuizz(obj, id) {
+function quizzPreparing(obj, id) {
     var keys = Object.keys(quizzesObject);
     var random = Math.floor(Math.random() * keys.length);
     var chosenQuizz = keys[random];
     var gameRounds = parseInt(obj.GAME_ROUNDS)
-    console.log("quizzesObject:" + quizzesObject);
-    console.log("Keys: " + keys);
-    console.log("Chosen newQuizz: " +chosenQuizz);
+    console.log("quizzPreparing - room: " + id + " - round: " + gameRounds);
 
     //RUN THE GAME
     var crtTime =  new Date().toLocaleString();
-    db.ref("/rooms").child(id).update({"GAME_STATUS": "running",
+    db.ref("/rooms").child(id).update({"GAME_STATUS": "preparing",
                                        "GAME_QUIZZ" : String(chosenQuizz),
-                                       "GAME_RUN_START": crtTime,
                                        "GAME_ROUNDS": String(gameRounds+1)});
 }
 
+function quizzReady(obj, id) {
+    var gameRounds = parseInt(obj.GAME_ROUNDS)
+    console.log("quizReady - room: " + id + " - round: " + gameRounds);
+
+    //var crtTime =  new Date().toLocaleString();
+    db.ref("/rooms").child(id).update({"GAME_STATUS": "running"});
+}
+
 //COMPUTE RESULTS OF CURRENT OBJECT WITH given ROOM id
-function computeResult(obj, id) {
+function quizzRunning(obj, id) {
     console.log("computeResult: starting");
     var refQuizz = db.ref("/quizzes/"+obj.GAME_QUIZZ);
     //GET QUIZZ ANSWER
@@ -177,6 +188,9 @@ function computeResult(obj, id) {
        var answerPlayer2 = formatString(obj.PLAYER2_RESULT);
        var timerPlayer1 = parseFloat(obj.PLAYER1_TIMER);
        var timerPlayer2 = parseFloat(obj.PLAYER2_TIMER);
+       var winsPlayer1 = parseInt(obj.PLAYER1_WINS);
+       var winsPlayer2 = parseInt(obj.PLAYER2_WINS);
+       var rounds = parseInt(obj.GAME_ROUNDS);
        var winnerId = 0;
 
        //Choose the winner
@@ -193,8 +207,15 @@ function computeResult(obj, id) {
                 winnerId = 2;
        }
 
-       db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "GAME_WINNER": winnerId});
+       if(winnerId == 1)
+           db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "PLAYER1_WINS": String(winsPlayer1 +1)});
+       if(winnerId == 2)
+           db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "PLAYER2_WINS": String(winsPlayer2 +1)});
 
+
+       if(rounds<=5 || (rounds>5 && winsPlayer1 == winsPlayer2)) {
+           db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForPlayers", "PLAYER1_STATUS": "waiting", "PLAYER2_STATUS":"waiting"});
+        }
 
     }, function (errorObject) {
       console.log("The read failed: " + errorObject.code);
