@@ -216,6 +216,9 @@ function quizzRunning(obj, id) {
        if(rounds<=5 || (rounds>5 && winsPlayer1 == winsPlayer2)) {
            db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForPlayers", "PLAYER1_STATUS": "waiting", "PLAYER2_STATUS":"waiting"});
         }
+        else {
+             db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited"});
+        }
 
     }, function (errorObject) {
       console.log("The read failed: " + errorObject.code);
