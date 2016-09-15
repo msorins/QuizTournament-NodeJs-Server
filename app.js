@@ -217,7 +217,11 @@ function quizzRunning(obj, id) {
            db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForPlayers", "PLAYER1_STATUS": "waiting", "PLAYER2_STATUS":"waiting"});
         }
         else {
-             db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited"});
+            if(winsPlayer1 > winsPlayer2)
+                db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER1"});
+            else {
+                db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER2"});
+            }
         }
 
     }, function (errorObject) {
