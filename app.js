@@ -146,7 +146,11 @@ function findAndComputeRooms(obj) {
             if(obj[crt].PLAYER1_STATUS == "done" && obj[crt].PLAYER2_STATUS == "done") {
                 quizzRunning(obj[crt], crt);
             }
+        }
 
+        //Check of Game Abandon
+        if(obj[crt].GAME_STATUS != "finished" && ( obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS =='exited' )) {
+            quizzAbandon(obj[crt], crt);
         }
     }
 
@@ -213,7 +217,7 @@ function quizzRunning(obj, id) {
            db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "PLAYER2_WINS": String(winsPlayer2 +1)});
 
 
-       if(rounds<=5 || (rounds>5 && winsPlayer1 == winsPlayer2)) {
+       if(rounds<=2 || (rounds>2 && winsPlayer1 == winsPlayer2)) {
            db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForPlayers", "PLAYER1_STATUS": "waiting", "PLAYER2_STATUS":"waiting"});
         }
         else {
@@ -228,6 +232,10 @@ function quizzRunning(obj, id) {
       console.log("The read failed: " + errorObject.code);
     });
     console.log("computeResult:" + JSON.stringify(obj));
+}
+
+function quizzAbandon(obj, id) {
+    db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "GAME_WINNER": "ABANDON"});
 }
 
 function formatString(str) {
