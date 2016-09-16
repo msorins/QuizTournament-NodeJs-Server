@@ -100,7 +100,7 @@ function makeMatching(obj) {
               PLAYER2_STATUS: "waiting",
               PLAYER1_WINS: "0",
               PLAYER2_WINS: "0",
-              GAME_ROUNDS: "0",
+              GAME_ROUNDS: "1",
               GAME_STATUS: "waitingForPlayers"
             });
 
@@ -212,12 +212,13 @@ function quizzRunning(obj, id) {
        }
 
        if(winnerId == 1)
-           db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "PLAYER1_WINS": String(winsPlayer1 +1)});
-       if(winnerId == 2)
-           db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForNewRound", "PLAYER2_WINS": String(winsPlayer2 +1)});
+           winsPlayer1++;
+       else
+           winsPlayer2++;
 
+       db.ref("/rooms").child(id).update({"PLAYER1_WINS": String(winsPlayer1), "PLAYER2_WINS": String(winsPlayer2)});
 
-       if(rounds<=2 || (rounds>2 && winsPlayer1 == winsPlayer2)) {
+       if(rounds<=5 || (rounds>5 && winsPlayer1 == winsPlayer2)) {
            db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForPlayers", "PLAYER1_STATUS": "waiting", "PLAYER2_STATUS":"waiting"});
         }
         else {
