@@ -100,9 +100,12 @@ function makeMatching(obj) {
               GAME_STATUS: "waitingForPlayers"
             });
 
-            //Setting user roomId and QP
-            db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID), "QP": String(obj[key1].QP - 10)});
-            db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID), "QP": String(obj[key2].QP - 10)});
+            //Setting user roomId
+            db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
+            db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID)});
+
+            //Withdraw QP from players
+            addToPlayer(key1, "QP", -10); addToPlayer(key2, "QP", -10);
 
             //Deleting selected users from queue
             var deleteRef = db.ref("/queue").child(key1);    deleteRef.remove();  obj[key1] = null;
@@ -226,12 +229,16 @@ function quizzRunning(obj, id) {
         else {
             if(winsPlayer1 > winsPlayer2) {
                 db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER1"});
-                addQpToPlayer(obj.PLAYER1_ID, 20);
+                addToPlayer(obj.PLAYER1_ID, "QP", 20);
+                addToPlayer(obj.PLAYER1_ID, "GAMES_WON", 1);
             }
             else {
                 db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER2"});
-                addQpToPlayer(obj.PLAYER2_ID, 20);
+                addToPlayer(obj.PLAYER2_ID, "QP", 20);
+                addToPlayer(obj.PLAYER2_ID, "GAMES_WON", 1);
             }
+            addToPlayer(obj.PLAYER1_ID, "GAMES_PLAYED", 1);
+            addToPlayer(obj.PLAYER2_ID, "GAMES_PLAYED", 1);
         }
 
     }, function (errorObject) {
@@ -245,25 +252,27 @@ function quizzAbandon(obj, id) {
 }
 
 function formatString(str) {
-    return str.toLowerCase().trim().replace(" ", "");
+    if(typeof str !== 'undefined')
+        return str.toLowerCase().trim().replace(" ", "");
+    else
+        return "";
 }
 
-function addQpToPlayer(playerId, qp) {
+function addToPlayer(playerId, propriety, value) {
     var refPlayer = db.ref("/connectedUsers/"+playerId);
-    var toAddQp = qp, crtQp;
     refPlayer.once("value", function(snapshot) {
        var obj  = snapshot.val();
-       crtQP = parseInt(obj.QP) + toAddQp;
+       var crt = parseInt(obj[propriety]) + value;
 
-       db.ref("connectedUsers/").child(playerId).update({"QP": crtQP.toString()});
-       console.log(`Added ${toAddQp} QP to player ${playerId}`);
+       var objNew = {};    objNew[propriety] = crt.toString();
+       db.ref("connectedUsers/").child(playerId).update(objNew);
 
+       console.log(`Added ${value} ${propriety} to player ${playerId}`);
     }, function (errorObject) {
       console.log("The read failed: " + errorObject.code);
     });
-
-
 }
+
 
 //QUIZZ SECTION
 var refQuizzes = db.ref("/quizzes");
