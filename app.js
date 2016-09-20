@@ -87,10 +87,6 @@ function makeMatching(obj) {
                 }
             }
 
-            //Deleting selected users from room
-            var deleteRef = db.ref("/queue").child(key1);    deleteRef.remove();  obj[key1] = null;
-            var deleteRef = db.ref("/queue").child(key2);    deleteRef.remove();  obj[key2] = null;
-
             //Setting the new room with two users
             var roomRef = db.ref("/rooms");
             roomRef.child(crtRoomID).set({
@@ -104,8 +100,14 @@ function makeMatching(obj) {
               GAME_STATUS: "waitingForPlayers"
             });
 
-            db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
-            db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID)});
+            //Setting user roomId and QP
+            db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID), "QP": String(obj[key1].QP - 10)});
+            db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID), "QP": String(obj[key2].QP - 10)});
+
+            //Deleting selected users from queue
+            var deleteRef = db.ref("/queue").child(key1);    deleteRef.remove();  obj[key1] = null;
+            var deleteRef = db.ref("/queue").child(key2);    deleteRef.remove();  obj[key2] = null;
+
 
             nrOfQueueUsers -= 2;
             crtRoomID += 1;
@@ -218,14 +220,17 @@ function quizzRunning(obj, id) {
 
        db.ref("/rooms").child(id).update({"PLAYER1_WINS": String(winsPlayer1), "PLAYER2_WINS": String(winsPlayer2)});
 
-       if(rounds<=5 || (rounds>5 && winsPlayer1 == winsPlayer2)) {
+       if(rounds<=2 || (rounds>2 && winsPlayer1 == winsPlayer2)) {
            db.ref("/rooms").child(id).update({"GAME_STATUS": "waitingForPlayers", "PLAYER1_STATUS": "waiting", "PLAYER2_STATUS":"waiting"});
         }
         else {
-            if(winsPlayer1 > winsPlayer2)
+            if(winsPlayer1 > winsPlayer2) {
                 db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER1"});
+                addQpToPlayer(obj.PLAYER1_ID, 20);
+            }
             else {
                 db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER2"});
+                addQpToPlayer(obj.PLAYER2_ID, 20);
             }
         }
 
@@ -241,6 +246,23 @@ function quizzAbandon(obj, id) {
 
 function formatString(str) {
     return str.toLowerCase().trim().replace(" ", "");
+}
+
+function addQpToPlayer(playerId, qp) {
+    var refPlayer = db.ref("/connectedUsers/"+playerId);
+    var toAddQp = qp, crtQp;
+    refPlayer.once("value", function(snapshot) {
+       var obj  = snapshot.val();
+       crtQP = parseInt(obj.QP) + toAddQp;
+
+       db.ref("connectedUsers/").child(playerId).update({"QP": crtQP.toString()});
+       console.log(`Added ${toAddQp} QP to player ${playerId}`);
+
+    }, function (errorObject) {
+      console.log("The read failed: " + errorObject.code);
+    });
+
+
 }
 
 //QUIZZ SECTION
