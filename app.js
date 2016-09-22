@@ -48,6 +48,7 @@ firebase.initializeApp({
 var db = firebase.database();
 var quizzesObject = {};
 var usersObject = {};
+var statsObject = {};
 
 //USER SECTION
 var refQuizzes = db.ref("/connectedUsers");
@@ -60,7 +61,6 @@ refQuizzes.on("value", function(snapshot) {
 
 //QUEUE SECTION
 var ref = db.ref("/queue");
-var crtRoomID = 0 ;
 var waitMakeMatching = false, waitFindAndComputeRooms = false;
 //Async call when a users enter in queue
 ref.on("value", function(snapshot) {
@@ -119,9 +119,10 @@ function makeMatching(obj) {
                     break;
                 }
             }
-            
+
             if(key1 != null && key2 != null) {
-                console.log("key1: " + key1 + "key2: " + key2)
+                var crtRoomID = parseInt(statsObject.NRROOMS);
+
                 //Setting the new room with two users
                 var roomRef = db.ref("/rooms");
                 roomRef.child(crtRoomID).set({
@@ -148,7 +149,7 @@ function makeMatching(obj) {
 
 
                 nrOfQueueUsers -= 2;
-                crtRoomID += 1;
+                db.ref("/stats").update({"NRROOMS" : (crtRoomID + 1).toString()});
             }
         }
     }
@@ -187,13 +188,34 @@ function findAndComputeRooms(obj) {
             }
         }
 
-        //Check of Game Abandon
-        if(obj[crt].GAME_STATUS != "finished" && ( obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS =='exited' )) {
-            quizzAbandon(obj[crt], crt);
+        //GAME ABANDON
+        if(obj[crt].GAME_STATUS != "finished"){
+            if( obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS =='exited' )
+                quizzAbandon(obj[crt], crt);
+            if(typeof usersObject[ obj[crt].PLAYER1_ID ] === 'undefined' || typeof usersObject[ obj[crt].PLAYER1_ID ] === 'undefined')
+                continue;
+            if( parseInt(Date.now()) - parseInt(usersObject[ obj[crt].PLAYER1_ID ].TIME) >= 8000 )
+                quizzAbandon(obj[crt], crt);
+            if( parseInt(Date.now()) - parseInt(usersObject[ obj[crt].PLAYER2_ID ].TIME) >= 8000 )
+                quizzAbandon(obj[crt], crt);
         }
+
+        //MOVE FINISHED ROOMS TO ARCHIVE
+        if(obj[crt].GAME_STATUS == "finished" && obj[crt].PLAYER1_STATUS == "exited" && obj[crt].PLAYER2_STATUS == "exited" )
+            moveToArchivedRooms(obj[crt], crt);
     }
 
   waitFindAndComputeRooms = false;
+}
+
+function moveToArchivedRooms(obj, id) {
+    var newObj = {};
+    newObj[id] = obj;
+    console.log("######################");
+    console.log("moveToARvhicedRooms: " + JSON.stringify(newObj));
+    console.log("######################");
+    db.ref("/archivedRooms").update(newObj);
+    db.ref("/rooms").child(id).remove();
 }
 
 function quizzPreparing(obj, id) {
@@ -313,6 +335,15 @@ var refQuizzes = db.ref("/quizzes");
 refQuizzes.on("value", function(snapshot) {
    console.log("QUIZZ Section Updated");
    quizzesObject = snapshot.val();
+}, function (errorObject) {
+  console.log("The read failed: " + errorObject.code);
+});
+
+//STATS SECTION
+var refStats = db.ref("/stats");
+refStats.on("value", function(snapshot) {
+   console.log("STATS Section Updated");
+   statsObject = snapshot.val();
 }, function (errorObject) {
   console.log("The read failed: " + errorObject.code);
 });
