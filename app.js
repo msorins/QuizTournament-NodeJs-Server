@@ -47,6 +47,16 @@ firebase.initializeApp({
 
 var db = firebase.database();
 var quizzesObject = {};
+var usersObject = {};
+
+//USER SECTION
+var refQuizzes = db.ref("/connectedUsers");
+refQuizzes.on("value", function(snapshot) {
+   usersObject = snapshot.val();
+}, function (errorObject) {
+  console.log("The read failed: " + errorObject.code);
+});
+
 
 //QUEUE SECTION
 var ref = db.ref("/queue");
@@ -57,26 +67,49 @@ ref.on("value", function(snapshot) {
     console.log("QUEUE Section Updated");
    var obj = snapshot.val();
    if(waitMakeMatching == false)
-        makeMatching(obj);
+        validateQueueEntries(obj);
 }, function (errorObject) {
   console.log("The read failed: " + errorObject.code);
 });
 
+function validateQueueEntries(obj) {
+    waitMakeMatching = true;
+
+    if(obj != null){
+        for(var i in obj) {
+            var userTimeStamp = parseInt(usersObject[i].TIME);
+            var currentTimeStamp = parseInt(Date.now());
+            var differenceTimeStamp = currentTimeStamp - userTimeStamp;
+            if(differenceTimeStamp  >= 8000) {
+                console.log(`Queue with user id ${i} removed - Timeout`);
+                db.ref("/queue").child(i).remove();
+                obj[i] = null;
+            }
+
+        }
+    }
+
+    makeMatching(obj);
+    waitMakeMatching = false;
+}
+
+
 //Make ROOMS
 function makeMatching(obj) {
     if(obj != null){
-        waitMakeMatching = true;
-
+        console.log(JSON.stringify(obj));
         var nrOfQueueUsers = Object.keys(obj).length;
         console.log("Number of queue users: ", nrOfQueueUsers);
 
         while(nrOfQueueUsers >= 2) {
             var key1 = null, key2 = null;
+
+            nrOfQueueUsers = 0;
             for(var key in obj) {
                 if(obj[key] == null)
                     continue;
 
-                console.log("Key: " + key);
+                nrOfQueueUsers++;
 
                 //Choose the two players
                 if(key1 == null)
@@ -86,37 +119,38 @@ function makeMatching(obj) {
                     break;
                 }
             }
+            
+            if(key1 != null && key2 != null) {
+                console.log("key1: " + key1 + "key2: " + key2)
+                //Setting the new room with two users
+                var roomRef = db.ref("/rooms");
+                roomRef.child(crtRoomID).set({
+                  PLAYER1_ID: key1,
+                  PLAYER2_ID: key2,
+                  PLAYER1_STATUS: "waiting",
+                  PLAYER2_STATUS: "waiting",
+                  PLAYER1_WINS: "0",
+                  PLAYER2_WINS: "0",
+                  GAME_ROUNDS: "1",
+                  GAME_STATUS: "waitingForPlayers"
+                });
 
-            //Setting the new room with two users
-            var roomRef = db.ref("/rooms");
-            roomRef.child(crtRoomID).set({
-              PLAYER1_ID: key1,
-              PLAYER2_ID: key2,
-              PLAYER1_STATUS: "waiting",
-              PLAYER2_STATUS: "waiting",
-              PLAYER1_WINS: "0",
-              PLAYER2_WINS: "0",
-              GAME_ROUNDS: "1",
-              GAME_STATUS: "waitingForPlayers"
-            });
+                //Setting user roomId
+                db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
+                db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID)});
 
-            //Setting user roomId
-            db.ref("/connectedUsers").child(key1).update({"GAME_ROOM": String(crtRoomID)});
-            db.ref("/connectedUsers").child(key2).update({"GAME_ROOM": String(crtRoomID)});
+                //Withdraw QP from players
+                addToPlayer(key1, "QP", -10); addToPlayer(key2, "QP", -10);
 
-            //Withdraw QP from players
-            addToPlayer(key1, "QP", -10); addToPlayer(key2, "QP", -10);
-
-            //Deleting selected users from queue
-            var deleteRef = db.ref("/queue").child(key1);    deleteRef.remove();  obj[key1] = null;
-            var deleteRef = db.ref("/queue").child(key2);    deleteRef.remove();  obj[key2] = null;
+                //Deleting selected users from queue
+                var deleteRef = db.ref("/queue").child(key1);    deleteRef.remove();  obj[key1] = null;
+                var deleteRef = db.ref("/queue").child(key2);    deleteRef.remove();  obj[key2] = null;
 
 
-            nrOfQueueUsers -= 2;
-            crtRoomID += 1;
+                nrOfQueueUsers -= 2;
+                crtRoomID += 1;
+            }
         }
-
-        waitMakeMatching = false;
     }
 }
 
@@ -228,12 +262,12 @@ function quizzRunning(obj, id) {
         }
         else {
             if(winsPlayer1 > winsPlayer2) {
-                db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER1"});
+                db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "GAME_WINNER":"PLAYER1"});
                 addToPlayer(obj.PLAYER1_ID, "QP", 20);
                 addToPlayer(obj.PLAYER1_ID, "GAMES_WON", 1);
             }
             else {
-                db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "PLAYER1_STATUS": "exited", "PLAYER2_STATUS":"exited", "GAME_WINNER":"PLAYER2"});
+                db.ref("/rooms").child(id).update({"GAME_STATUS": "finished", "GAME_WINNER":"PLAYER2"});
                 addToPlayer(obj.PLAYER2_ID, "QP", 20);
                 addToPlayer(obj.PLAYER2_ID, "GAMES_WON", 1);
             }
