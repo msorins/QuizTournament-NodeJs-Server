@@ -8,7 +8,7 @@ var bodyParser = require('body-parser');
 var routes = require('./routes/index');
 var users = require('./routes/users');
 
-var app = express();
+app = express();
 
 var firebase = require("firebase");
 
@@ -45,10 +45,11 @@ firebase.initializeApp({
   databaseURL: "https://logoquizz-tournament.firebaseio.com"
 });
 
-var db = firebase.database();
-var quizzesObject = {};
-var usersObject = {};
-var statsObject = {};
+db = firebase.database();
+pendingQuizzesObject = {};
+quizzesObject = {};
+usersObject = {};
+statsObject = {};
 
 //USER SECTION
 var refQuizzes = db.ref("/connectedUsers");
@@ -335,6 +336,31 @@ var refQuizzes = db.ref("/quizzes");
 refQuizzes.on("value", function(snapshot) {
    console.log("QUIZZ Section Updated");
    quizzesObject = snapshot.val();
+    console.log(JSON.stringify(quizzesObject));
+}, function (errorObject) {
+  console.log("The read failed: " + errorObject.code);
+});
+
+judgePendingQuizz = function (obj) {
+    console.log("POST REQUEST: " + JSON.stringify(obj));
+    if(pendingQuizzesObject[obj.quizzID]) {
+        pendingQuizzesObject[obj.quizzID].ANSWER = obj.quizzAnswer;
+
+        if(obj.action == "ok") {
+            db.ref("quizzes").child(obj.quizzID).update(pendingQuizzesObject[obj.quizzID]);
+            console.log(`Pending quizz with id ${obj.quizzID} was added to quizzes`);
+        } else
+            console.log(`Pending quizz with id ${obj.quizzID} was erased`);
+
+        db.ref("/pendingQuizzes").child(obj.quizzID).remove();
+    }
+}
+
+//PENDING QUIZZ SECTION
+var refPendingQuizzes = db.ref("/").child('pendingQuizzes');
+refPendingQuizzes.on("value", function(snapshot) {
+   console.log("pendingQUIZZ Section Updated");
+   pendingQuizzesObject = snapshot.val();
 }, function (errorObject) {
   console.log("The read failed: " + errorObject.code);
 });
@@ -347,9 +373,6 @@ refStats.on("value", function(snapshot) {
 }, function (errorObject) {
   console.log("The read failed: " + errorObject.code);
 });
-
-
-
 
 
 
@@ -392,5 +415,5 @@ app.use(function(err, req, res, next) {
   });
 });
 
-
+app.listen(3001);
 module.exports = app;
