@@ -1,5 +1,31 @@
 extends layout
 
+mixin thumbnail(key, obj)
+  div.thumbnail(style="padding:15px")
+    img(src="#{obj.URL}", style="max-height:250px")
+    br
+    form(action="/", method="post")
+      div.caption
+        div.input-group.input-group-lg
+          span.input-group-addon#sizing-addon2 ID
+          input.form-control(type="text", name="quizzID" aria-describedby="sizing-addon", value=key, readonly)
+        br
+        div.input-group.input-group-lg
+          span.input-group-addon#sizing-addon1 Answer
+          input.form-control(type="text", name="quizzAnswer" aria-describedby="sizing-addon1", value=obj.ANSWER)
+        br
+        div.btn-group.btn-group-justified(role="group")
+          div.btn-group(role="group")
+            button.btn.btn-default(name="action", value="ok")
+              span.glyphicon.glyphicon-ok
+          div.btn-group(role="group")
+            button.btn.btn-default(name="action", value="remove")
+              span.glyphicon.glyphicon-remove
+
 block content
-  h1= title
-  p Welcome to #{title}
+  div.container
+    h1 Pending quizzes administration !
+    div
+      - for (crt in pendingQuizzesObject) {
+          +thumbnail(crt, pendingQuizzesObject[crt])
+      - }
