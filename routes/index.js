@@ -8,7 +8,7 @@ router.get('/', function(req, res, next) {
 
 router.post('/', function(req, res, next) {
   judgePendingQuizz(req.body);
-  res.render('index', { title: 'Express' });
+  res.redirect('/');
 });
 
 

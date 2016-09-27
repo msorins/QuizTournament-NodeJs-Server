@@ -1,0 +1,21 @@
+extends layout
+
+block content
+  div.container
+    h1 Add a quiz !
+    div.thumbnail(style="padding:15px")
+      form(action="/add", method="post", style="margin-top:50px", enctype="multipart/form-data")
+        div.form-group(style="margin-left:10px;")
+          label(for="quizImg") File input
+          input(type="file", name="quizImg")
+
+        div.caption
+          div.input-group.input-group-lg
+            span.input-group-addon#sizing-addon1 Answer
+            input.form-control(type="text", name="quizzAnswer" aria-describedby="sizing-addon1")
+          br
+
+          div.btn-group.btn-group-justified(role="group")
+            div.btn-group(role="group")
+              button.btn.btn-default(name="action", value="ok")
+                span.glyphicon.glyphicon-ok
