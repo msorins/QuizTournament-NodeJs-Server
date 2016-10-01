@@ -389,7 +389,9 @@ judgePendingQuizz = function(obj) {
 
         if (obj.action == "ok") {
             db.ref("quizzes").child(obj.quizzID).update(pendingQuizzesObject[obj.quizzID]);
-            console.log(`Pending quizz with id ${obj.quizzID} was added to quizzes`);
+            var crtUserQp = parseInt(usersObject[obj.quizzBY].QP);
+            db.ref("connectedUsers").child(obj.quizzBY).update({"QP" : (crtUserQp +50).toString()});
+            console.log(`Pending quizz with id ${obj.quizzID} was added to quizzes. Player ${obj.quizzBY} rewarded with 50 QP`);
         } else
             console.log(`Pending quizz with id ${obj.quizzID} was erased`);
 
