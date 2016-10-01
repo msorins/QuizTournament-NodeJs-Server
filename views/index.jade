@@ -7,7 +7,11 @@ mixin thumbnail(key, obj)
     form(action="/", method="post")
       div.caption
         div.input-group.input-group-lg
-          span.input-group-addon#sizing-addon2 ID
+          span.input-group-addon#sizing-addon2 PID
+          input.form-control(type="text", name="quizzBY" aria-describedby="sizing-addon", value=obj.BY, readonly)
+        br
+        div.input-group.input-group-lg
+          span.input-group-addon#sizing-addon2 QID
           input.form-control(type="text", name="quizzID" aria-describedby="sizing-addon", value=key, readonly)
         br
         div.input-group.input-group-lg

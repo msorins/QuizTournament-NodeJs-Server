@@ -57,7 +57,8 @@ router.post('/', multer.single('quizImg'), sendUploadToGCS,  function insert (re
         var newQuizObj = {};
         newQuizObj.ANSWER =  req.body.quizzAnswer;
         newQuizObj.URL = req.file.cloudStoragePublicUrl;
-        db.ref("/quizzes").child(statsObject.NRQUIZZES).update(newQuizObj);
+        newQuizObj.BY = "admin";
+        db.ref("/quizzes").child(statsObject.NRQUIZZES+1).update(newQuizObj);
         db.ref("/stats").update({"NRQUIZZES": (parseFloat(statsObject.NRQUIZZES) + 1).toString()});
     }
 
