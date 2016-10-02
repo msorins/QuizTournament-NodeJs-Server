@@ -4,6 +4,7 @@ var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
+var FCM = require('fcm-push');
 
 var index = require('./routes/index');
 var addquiz = require('./routes/addquiz');
@@ -34,7 +35,9 @@ app.use('/add', addquiz);
 
 
 
-
+//FCM Cloud Messaging setup
+var serverKey = 'AIzaSyCFlsxjBOyNnch6UB9wpNTQBRBmp5KYSHk';
+var fcm = new FCM(serverKey);
 
 
 //Google Cloud Portion ( for FireBase Storage )
@@ -387,13 +390,50 @@ judgePendingQuizz = function(obj) {
     if (pendingQuizzesObject[obj.quizzID]) {
         pendingQuizzesObject[obj.quizzID].ANSWER = obj.quizzAnswer;
 
+        var message = {};
+
         if (obj.action == "ok") {
             db.ref("quizzes").child(obj.quizzID).update(pendingQuizzesObject[obj.quizzID]);
             var crtUserQp = parseInt(usersObject[obj.quizzBY].QP);
             db.ref("connectedUsers").child(obj.quizzBY).update({"QP" : (crtUserQp +50).toString()});
             console.log(`Pending quizz with id ${obj.quizzID} was added to quizzes. Player ${obj.quizzBY} rewarded with 50 QP`);
-        } else
+
+            //Send Notification to user
+            message = {
+                to: usersObject[obj.quizzBY].TOKEN,
+                collapse_key: 'quizAddNotify',
+                data: {
+                    your_custom_data_key: 'your_custom_data_value'
+                },
+                notification: {
+                    title: 'Quiz Accepted',
+                    body: '+50QP added to your account'
+                }
+            };
+        } else {
             console.log(`Pending quizz with id ${obj.quizzID} was erased`);
+
+            //Send Notification to user
+            message = {
+                to: usersObject[obj.quizzBY].TOKEN,
+                collapse_key: 'quizAddNotify',
+                data: {
+                    your_custom_data_key: 'your_custom_data_value'
+                },
+                notification: {
+                    title: 'Quiz Denied',
+                    body: 'Check guide section for more information'
+                }
+            };
+        }
+
+        fcm.send(message, function(err, response){
+            if (err) {
+                console.log("Something has gone wrong!");
+            } else {
+                console.log("Successfully sent with response: ", response);
+            }
+        });
 
         db.ref("/pendingQuizzes").child(obj.quizzID).remove();
     }
@@ -416,7 +456,6 @@ refStats.on("value", function(snapshot) {
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
-
 
 
 
