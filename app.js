@@ -8,7 +8,7 @@ var FCM = require('fcm-push');
 
 var index = require('./routes/index');
 var addquiz = require('./routes/addquiz');
-
+var importQuizzes = require("./routes/importQuizzes");
 
 app = express();
 
@@ -30,7 +30,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', index);
 app.use('/add', addquiz);
-
+app.use('/import', importQuizzes);
 
 
 
@@ -257,7 +257,8 @@ function quizzPreparing(obj, id) {
     db.ref("/rooms").child(id).update({
         "GAME_STATUS": "preparing",
         "GAME_QUIZZ": String(chosenQuizz),
-        "GAME_ROUNDS": String(gameRounds + 1)
+        "GAME_ROUNDS": String(gameRounds + 1),
+        "GAME_ANSWERLETTERS": quizzesObject[chosenQuizz].ANSWER.length
     });
 }
 

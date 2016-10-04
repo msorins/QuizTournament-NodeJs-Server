@@ -61,8 +61,7 @@ router.post('/', multer.single('quizImg'), sendUploadToGCS,  function insert (re
         db.ref("/quizzes").child(statsObject.NRQUIZZES+1).update(newQuizObj);
         db.ref("/stats").update({"NRQUIZZES": (parseFloat(statsObject.NRQUIZZES) + 1).toString()});
     }
-
-
+    res.redirect('/add');
   });
 
 module.exports = router;
