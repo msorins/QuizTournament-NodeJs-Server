@@ -77,40 +77,102 @@ var ref = db.ref("/queue");
 
 var waitMakeMatching = false,
     waitFindAndComputeRooms = false;
+
 //Async call when a users enter in queue
 ref.on("value", function(snapshot) {
     console.log("QUEUE Section Updated");
     var obj = snapshot.val();
     if (waitMakeMatching == false)
-        validateQueueEntries(obj);
+        processQueueEntries(obj);
+
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
 
-function validateQueueEntries(obj) {
+function processQueueEntries(obj) {
+    console.log("processQueueEntries function called");
     waitMakeMatching = true;
 
-    if (obj != null) {
+    obj = validateQueueEntries(obj);
+    obj = AiQueueEntries(obj);
+    makeMatching(obj);
+
+    waitMakeMatching = false;
+}
+
+function validateQueueEntries(obj) {
+    console.log("validateQueueEntries function called");
+    if (obj != null ) {
         for (var i in obj) {
             var userTimeStamp = parseInt(usersObject[i].TIME);
             var currentTimeStamp = parseInt(Date.now());
             var differenceTimeStamp = currentTimeStamp - userTimeStamp;
+            console.log(differenceTimeStamp);
             if (differenceTimeStamp >= 8000) {
                 console.log(`Queue with user id ${i} removed - Timeout`);
                 db.ref("/queue").child(i).remove();
                 obj[i] = null;
             }
+        }
+    }
+    return obj;
+}
 
+function AiQueueEntries(obj) {
+    console.log("AiQueueEntries function called");
+    if( obj != null ) {
+        for (var key in obj) {
+            if (obj[key] == null)
+                continue;
+
+            var userTimeStamp = parseInt(obj[key].ENTERTIME);
+            var currentTimeStamp = parseInt(Date.now());
+            var differenceTimeStamp = currentTimeStamp - userTimeStamp;
+            if (differenceTimeStamp >= 8000) {
+                //INITIATING THE QUIZZ WITH AI
+                console.log(`Queue - user with id ${key} is playing with AI`);
+                db.ref("/queue").child(key).remove();
+
+                var crtRoomID = parseInt(statsObject.NRROOMS);
+
+                //Setting the new room with one user
+                var roomRef = db.ref("/rooms");
+                roomRef.child(crtRoomID).set({
+                    PLAYER1_ID: key,
+                    PLAYER1_STATUS: "waiting",
+                    PLAYER1_WINS: "0",
+                    PLAYER2_WINS: "0",
+                    GAME_ROUNDS: "1",
+                    GAME_STATUS: "waitingForPlayers",
+                    GAME_MODE: "AI"
+                });
+
+                //Setting user roomId
+                db.ref("/connectedUsers").child(key).update({
+                    "GAME_ROOM": String(crtRoomID)
+                });
+
+                //Withdraw QP from players
+                addToPlayer(key, "QP", -10);
+
+                //Incrementing stats NR ROOMS number
+                db.ref("/stats").update({
+                    "NRROOMS": (crtRoomID + 1).toString()
+                });
+
+                //Deleting the object
+                obj[key] = null;
+            }
         }
     }
 
-    makeMatching(obj);
-    waitMakeMatching = false;
+    return obj;
 }
 
 
 //Make ROOMS
 function makeMatching(obj) {
+    console.log("makeMatching function called");
     if (obj != null) {
         console.log(JSON.stringify(obj));
         var nrOfQueueUsers = Object.keys(obj).length;
@@ -149,7 +211,8 @@ function makeMatching(obj) {
                     PLAYER1_WINS: "0",
                     PLAYER2_WINS: "0",
                     GAME_ROUNDS: "1",
-                    GAME_STATUS: "waitingForPlayers"
+                    GAME_STATUS: "waitingForPlayers",
+                    GAME_MODE: "twoPlayers"
                 });
 
                 //Setting user roomId
@@ -190,49 +253,91 @@ refRooms.on("value", function(snapshot) {
     if (!waitFindAndComputeRooms) {
         waitFindAndComputeRooms = true;
         findAndComputeRooms(obj);
+        waitFindAndComputeRooms = false;
     }
+
+
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
 
 function findAndComputeRooms(obj) {
     for (crt in obj) {
+        if( obj[crt].GAME_MODE == "twoPlayers" )
+            twoPlayersGameCompute(obj, crt);
+        if( obj[crt].GAME_MODE == "AI" )
+            AiGameCompute(obj, crt);
+    }
+}
+
+function AiGameCompute(obj, crt) {
+    if(obj[crt].GAME_STATUS == "waitingForPlayers" && obj[crt].PLAYER1_STATUS == 'connected')
+        quizzPreparing(obj[crt], crt);
+    if(obj[crt].GAME_STATUS == "preparing" && obj[crt].PLAYER1_STATUS == "ready")
+        quizzReady(obj[crt], crt);
+    if(obj[crt].GAME_STATUS == "running") {
+        var userAnswerTime = parseFloat(obj[crt].PLAYER1_TIMER);
+        var aiWon = false;
+        if(userAnswerTime >= 15.00)
+            aiWon = randomFunction(20);
+        if(userAnswerTime >= 10.00)
+            aiWon = randomFunction(35);
+        if(userAnswerTime >= 6.00)
+            aiWon = randomFunction(45);
+        if(userAnswerTime < 6)
+            aiWon = randomFunction(60);
+
+        var winsPlayer1 = parseInt(obj[crt].PLAYER1_WINS);
+        var winsPlayer2 = parseInt(obj[crt].PLAYER2_WINS);
+
+        if(aiWon == true)
+            winsPlayer2++;
+        else
+            winsPlayer1++;
+
+        db.ref("/rooms").child(crt).update({
+            "PLAYER1_WINS": String(winsPlayer1),
+            "PLAYER2_WINS": String(winsPlayer2)
+        });
+
+        quizzEndRound(obj, crt, winsPlayer1, winsPlayer2);
+    }
+}
+
+function twoPlayersGameCompute(obj, crt) {
         //STEP1: WAITING
-        if (obj[crt].GAME_STATUS == "waitingForPlayers")
-            if (obj[crt].PLAYER1_STATUS == "connected" && obj[crt].PLAYER2_STATUS == "connected") {
-                quizzPreparing(obj[crt], crt);
-            }
-
-            //STEP1: PREPARING
-        if (obj[crt].GAME_STATUS == "preparing")
-            if (obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
-                quizzReady(obj[crt], crt);
-            }
-            //STEP3: RUNNING
-        if (obj[crt].GAME_STATUS == "running") {
-            if (obj[crt].PLAYER1_STATUS == "done" && obj[crt].PLAYER2_STATUS == "done") {
-                quizzRunning(obj[crt], crt);
-            }
+    if (obj[crt].GAME_STATUS == "waitingForPlayers")
+        if (obj[crt].PLAYER1_STATUS == "connected" && obj[crt].PLAYER2_STATUS == "connected") {
+            quizzPreparing(obj[crt], crt);
         }
 
-        //GAME ABANDON
-        if (obj[crt].GAME_STATUS != "finished") {
-            if (obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS == 'exited')
-                quizzAbandon(obj[crt], crt);
-            if (typeof usersObject[obj[crt].PLAYER1_ID] === 'undefined' || typeof usersObject[obj[crt].PLAYER1_ID] === 'undefined')
-                continue;
-            if (parseInt(Date.now()) - parseInt(usersObject[obj[crt].PLAYER1_ID].TIME) >= 8000)
-                quizzAbandon(obj[crt], crt);
-            if (parseInt(Date.now()) - parseInt(usersObject[obj[crt].PLAYER2_ID].TIME) >= 8000)
-                quizzAbandon(obj[crt], crt);
+        //STEP1: PREPARING
+    if (obj[crt].GAME_STATUS == "preparing")
+        if (obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
+            quizzReady(obj[crt], crt);
         }
-
-        //MOVE FINISHED ROOMS TO ARCHIVE
-        if (obj[crt].GAME_STATUS == "finished" && obj[crt].PLAYER1_STATUS == "exited" && obj[crt].PLAYER2_STATUS == "exited")
-            moveToArchivedRooms(obj[crt], crt);
+        //STEP3: RUNNING
+    if (obj[crt].GAME_STATUS == "running") {
+        if (obj[crt].PLAYER1_STATUS == "done" && obj[crt].PLAYER2_STATUS == "done") {
+            quizzRunning(obj[crt], crt);
+        }
     }
 
-    waitFindAndComputeRooms = false;
+    //GAME ABANDON
+    if (obj[crt].GAME_STATUS != "finished") {
+        if (obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS == 'exited')
+            quizzAbandon(obj[crt], crt);
+        //if (typeof usersObject[obj[crt].PLAYER1_ID] === 'undefined' || typeof usersObject[obj[crt].PLAYER1_ID] === 'undefined')
+            //break;
+        if (parseInt(Date.now()) - parseInt(usersObject[obj[crt].PLAYER1_ID].TIME) >= 8000)
+            quizzAbandon(obj[crt], crt);
+        if (parseInt(Date.now()) - parseInt(usersObject[obj[crt].PLAYER2_ID].TIME) >= 8000)
+            quizzAbandon(obj[crt], crt);
+    }
+
+    //MOVE FINISHED ROOMS TO ARCHIVE
+    if (obj[crt].GAME_STATUS == "finished" && obj[crt].PLAYER1_STATUS == "exited" && obj[crt].PLAYER2_STATUS == "exited")
+        moveToArchivedRooms(obj[crt], crt);
 }
 
 function moveToArchivedRooms(obj, id) {
@@ -287,7 +392,6 @@ function quizzRunning(obj, id) {
         var timerPlayer2 = parseFloat(obj.PLAYER2_TIMER);
         var winsPlayer1 = parseInt(obj.PLAYER1_WINS);
         var winsPlayer2 = parseInt(obj.PLAYER2_WINS);
-        var rounds = parseInt(obj.GAME_ROUNDS);
         var winnerId = 0;
 
         //Choose the winner
@@ -314,36 +418,42 @@ function quizzRunning(obj, id) {
             "PLAYER2_WINS": String(winsPlayer2)
         });
 
-        if (rounds <= 2 || (rounds > 2 && winsPlayer1 == winsPlayer2)) {
-            db.ref("/rooms").child(id).update({
-                "GAME_STATUS": "waitingForPlayers",
-                "PLAYER1_STATUS": "waiting",
-                "PLAYER2_STATUS": "waiting"
-            });
-        } else {
-            if (winsPlayer1 > winsPlayer2) {
-                db.ref("/rooms").child(id).update({
-                    "GAME_STATUS": "finished",
-                    "GAME_WINNER": "PLAYER1"
-                });
-                addToPlayer(obj.PLAYER1_ID, "QP", 20);
-                addToPlayer(obj.PLAYER1_ID, "GAMES_WON", 1);
-            } else {
-                db.ref("/rooms").child(id).update({
-                    "GAME_STATUS": "finished",
-                    "GAME_WINNER": "PLAYER2"
-                });
-                addToPlayer(obj.PLAYER2_ID, "QP", 20);
-                addToPlayer(obj.PLAYER2_ID, "GAMES_WON", 1);
-            }
-            addToPlayer(obj.PLAYER1_ID, "GAMES_PLAYED", 1);
-            addToPlayer(obj.PLAYER2_ID, "GAMES_PLAYED", 1);
-        }
+        quizzEndRound(obj, id, winsPlayer1, winsPlayer2);
 
     }, function(errorObject) {
         console.log("The read failed: " + errorObject.code);
     });
-    console.log("computeResult:" + JSON.stringify(obj));
+}
+
+function quizzEndRound(obj, id, winsPlayer1, winsPlayer2) {
+    var rounds = parseInt(obj.GAME_ROUNDS);
+    console.log("quizzEndRound: " + JSON.stringify(obj));
+
+    if (rounds <= 2 || (rounds > 2 && winsPlayer1 == winsPlayer2)) {
+        db.ref("/rooms").child(id).update({
+            "GAME_STATUS": "waitingForPlayers",
+            "PLAYER1_STATUS": "waiting",
+            "PLAYER2_STATUS": "waiting"
+        });
+    } else {
+        if (winsPlayer1 > winsPlayer2) {
+            db.ref("/rooms").child(id).update({
+                "GAME_STATUS": "finished",
+                "GAME_WINNER": "PLAYER1"
+            });
+            addToPlayer(obj.PLAYER1_ID, "QP", 20);
+            addToPlayer(obj.PLAYER1_ID, "GAMES_WON", 1);
+        } else {
+            db.ref("/rooms").child(id).update({
+                "GAME_STATUS": "finished",
+                "GAME_WINNER": "PLAYER2"
+            });
+            addToPlayer(obj.PLAYER2_ID, "QP", 20);
+            addToPlayer(obj.PLAYER2_ID, "GAMES_WON", 1);
+        }
+        addToPlayer(obj.PLAYER1_ID, "GAMES_PLAYED", 1);
+        addToPlayer(obj.PLAYER2_ID, "GAMES_PLAYED", 1);
+    }
 }
 
 function quizzAbandon(obj, id) {
@@ -458,9 +568,9 @@ refStats.on("value", function(snapshot) {
     console.log("The read failed: " + errorObject.code);
 });
 
-
-
-
+function randomFunction(chance) {
+    return (Math.floor(Math.random() * 100) + 1) >= chance ;
+}
 
 
 
