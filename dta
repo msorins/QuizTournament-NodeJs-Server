@@ -1,5 +1,0 @@
-apiKey: "AIzaSyDU5Fe8oc5unD9UXJYv4z2WKQNAai9wD-o",
-authDomain: "logoquizz-tournament.firebaseapp.com",
- databaseURL: "https://logoquizz-tournament.firebaseio.com",
- storageBucket: "logoquizz-tournament.appspot.com",
- messagingSenderId: "715576857925"
