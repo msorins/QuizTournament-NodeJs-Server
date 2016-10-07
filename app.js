@@ -57,11 +57,14 @@ firebase.initializeApp({
 
 db = firebase.database();
 
-
+//Global Objects with every important Firebase DB Node
 pendingQuizzesObject = {};
 quizzesObject = {};
 usersObject = {};
 statsObject = {};
+roomObject = {};
+queueObject = {};
+aiNames = ['Jon', 'Bob', 'Dan', 'Santo', 'Bill', 'McD', 'ProP', 'Luke'];
 
 //USER SECTION
 var refQuizzes = db.ref("/connectedUsers");
@@ -75,14 +78,15 @@ refQuizzes.on("value", function(snapshot) {
 //QUEUE SECTION
 var ref = db.ref("/queue");
 
-var waitMakeMatching = false,
+var waittwoPlayersQueueEntries = false,
     waitFindAndComputeRooms = false;
 
 //Async call when a users enter in queue
 ref.on("value", function(snapshot) {
-    console.log("QUEUE Section Updated");
     var obj = snapshot.val();
-    if (waitMakeMatching == false)
+    queueObject = obj;
+    //If the function is not alreday processing
+    if (waittwoPlayersQueueEntries == false)
         processQueueEntries(obj);
 
 }, function(errorObject) {
@@ -91,16 +95,20 @@ ref.on("value", function(snapshot) {
 
 function processQueueEntries(obj) {
     console.log("processQueueEntries function called");
-    waitMakeMatching = true;
+    waittwoPlayersQueueEntries = true;
 
     obj = validateQueueEntries(obj);
     obj = AiQueueEntries(obj);
-    makeMatching(obj);
+    twoPlayersQueueEntries(obj);
 
-    waitMakeMatching = false;
+    waittwoPlayersQueueEntries = false;
 }
 
 function validateQueueEntries(obj) {
+    /*
+    Received an object with all users in queue
+    If an user exited the queue remove it from object and return it
+    */
     console.log("validateQueueEntries function called");
     if (obj != null ) {
         for (var i in obj) {
@@ -119,6 +127,10 @@ function validateQueueEntries(obj) {
 }
 
 function AiQueueEntries(obj) {
+    /*
+    Received an object with all users in queue
+    If the user is in a queue for a very long time, put it in a game with an AI, remove it from queue and return the new queue
+    */
     console.log("AiQueueEntries function called");
     if( obj != null ) {
         for (var key in obj) {
@@ -135,6 +147,10 @@ function AiQueueEntries(obj) {
 
                 var crtRoomID = parseInt(statsObject.NRROOMS);
 
+                //Choosing a nickname for the AI
+                var keys = Object.keys(aiNames);
+                var random = Math.floor(Math.random() * keys.length);
+
                 //Setting the new room with one user
                 var roomRef = db.ref("/rooms");
                 roomRef.child(crtRoomID).set({
@@ -144,8 +160,10 @@ function AiQueueEntries(obj) {
                     PLAYER2_WINS: "0",
                     GAME_ROUNDS: "1",
                     GAME_STATUS: "waitingForPlayers",
-                    GAME_MODE: "AI"
+                    GAME_MODE: "AI",
+                    AI_NICKNAME: aiNames[random]
                 });
+
 
                 //Setting user roomId
                 db.ref("/connectedUsers").child(key).update({
@@ -171,8 +189,12 @@ function AiQueueEntries(obj) {
 
 
 //Make ROOMS
-function makeMatching(obj) {
-    console.log("makeMatching function called");
+function twoPlayersQueueEntries(obj) {
+    /*
+    Received an validated object with all users in queue
+    Extract pairs of two users and put them in a queue
+    */
+    console.log("twoPlayersQueueEntries function called");
     if (obj != null) {
         console.log(JSON.stringify(obj));
         var nrOfQueueUsers = Object.keys(obj).length;
@@ -248,7 +270,6 @@ function makeMatching(obj) {
 //ROOMS SECTION
 var refRooms = db.ref("/rooms");
 refRooms.on("value", function(snapshot) {
-    console.log("ROOMS Section Updated");
     var obj = snapshot.val();
     if (!waitFindAndComputeRooms) {
         waitFindAndComputeRooms = true;
@@ -259,9 +280,15 @@ refRooms.on("value", function(snapshot) {
 
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
+    roomObject = snapshot.val();
 });
 
+
 function findAndComputeRooms(obj) {
+    /*
+        Receives an object with all rooms and call appropiate functions for each game type
+    */
+    console.log("findAndComputeRooms called");
     for (crt in obj) {
         if( obj[crt].GAME_MODE == "twoPlayers" )
             twoPlayersGameCompute(obj, crt);
@@ -271,11 +298,15 @@ function findAndComputeRooms(obj) {
 }
 
 function AiGameCompute(obj, crt) {
+    /*
+        Receives an object with the room and the room's name (crt)
+        Compute all stages of that game round
+     */
     if(obj[crt].GAME_STATUS == "waitingForPlayers" && obj[crt].PLAYER1_STATUS == 'connected')
         quizzPreparing(obj[crt], crt);
     if(obj[crt].GAME_STATUS == "preparing" && obj[crt].PLAYER1_STATUS == "ready")
         quizzReady(obj[crt], crt);
-    if(obj[crt].GAME_STATUS == "running") {
+    if(obj[crt].GAME_STATUS == "running" && obj[crt].PLAYER1_STATUS == "done") {
         var userAnswerTime = parseFloat(obj[crt].PLAYER1_TIMER);
         var aiWon = false;
         if(userAnswerTime >= 15.00)
@@ -290,33 +321,46 @@ function AiGameCompute(obj, crt) {
         var winsPlayer1 = parseInt(obj[crt].PLAYER1_WINS);
         var winsPlayer2 = parseInt(obj[crt].PLAYER2_WINS);
 
+        var answer = formatString(quizzesObject[obj.GAME_QUIZZ]);
+        var answerPlayer1 = formatString(obj.PLAYER1_RESULT);
+
         if(aiWon == true)
             winsPlayer2++;
         else
-            winsPlayer1++;
+            if(answerPlayer1 == answer)
+                winsPlayer1++;
 
         db.ref("/rooms").child(crt).update({
             "PLAYER1_WINS": String(winsPlayer1),
             "PLAYER2_WINS": String(winsPlayer2)
         });
 
-        quizzEndRound(obj, crt, winsPlayer1, winsPlayer2);
+        //Call the next roung
+        quizzEndRound(obj[crt], crt, winsPlayer1, winsPlayer2);
     }
+    if (obj[crt].GAME_STATUS == "finished" && obj[crt].PLAYER1_STATUS == "exited")
+        moveToArchivedRooms(obj[crt], crt);
 }
 
 function twoPlayersGameCompute(obj, crt) {
-        //STEP1: WAITING
+    /*
+        Receives an object with the room and the room's name (crt)
+        Compute all stages of that game round
+     */
+
+    //STEP1: WAITING
     if (obj[crt].GAME_STATUS == "waitingForPlayers")
         if (obj[crt].PLAYER1_STATUS == "connected" && obj[crt].PLAYER2_STATUS == "connected") {
             quizzPreparing(obj[crt], crt);
         }
 
-        //STEP1: PREPARING
+    //STEP1: PREPARING
     if (obj[crt].GAME_STATUS == "preparing")
         if (obj[crt].PLAYER1_STATUS == "ready" && obj[crt].PLAYER2_STATUS == "ready") {
             quizzReady(obj[crt], crt);
         }
-        //STEP3: RUNNING
+
+    //STEP3: RUNNING
     if (obj[crt].GAME_STATUS == "running") {
         if (obj[crt].PLAYER1_STATUS == "done" && obj[crt].PLAYER2_STATUS == "done") {
             quizzRunning(obj[crt], crt);
@@ -340,15 +384,6 @@ function twoPlayersGameCompute(obj, crt) {
         moveToArchivedRooms(obj[crt], crt);
 }
 
-function moveToArchivedRooms(obj, id) {
-    var newObj = {};
-    newObj[id] = obj;
-    console.log("######################");
-    console.log("moveToARvhicedRooms: " + JSON.stringify(newObj));
-    console.log("######################");
-    db.ref("/archivedRooms").update(newObj);
-    db.ref("/rooms").child(id).remove();
-}
 
 function quizzPreparing(obj, id) {
     var keys = Object.keys(quizzesObject);
@@ -427,7 +462,6 @@ function quizzRunning(obj, id) {
 
 function quizzEndRound(obj, id, winsPlayer1, winsPlayer2) {
     var rounds = parseInt(obj.GAME_ROUNDS);
-    console.log("quizzEndRound: " + JSON.stringify(obj));
 
     if (rounds <= 2 || (rounds > 2 && winsPlayer1 == winsPlayer2)) {
         db.ref("/rooms").child(id).update({
@@ -448,11 +482,15 @@ function quizzEndRound(obj, id, winsPlayer1, winsPlayer2) {
                 "GAME_STATUS": "finished",
                 "GAME_WINNER": "PLAYER2"
             });
-            addToPlayer(obj.PLAYER2_ID, "QP", 20);
-            addToPlayer(obj.PLAYER2_ID, "GAMES_WON", 1);
+            if(obj.GAME_MODE != "AI") {
+                addToPlayer(obj.PLAYER2_ID, "QP", 20);
+                addToPlayer(obj.PLAYER2_ID, "GAMES_WON", 1);
+            }
         }
         addToPlayer(obj.PLAYER1_ID, "GAMES_PLAYED", 1);
-        addToPlayer(obj.PLAYER2_ID, "GAMES_PLAYED", 1);
+        if(obj.GAME_MODE != "AI")
+            addToPlayer(obj.PLAYER2_ID, "GAMES_PLAYED", 1);
+
     }
 }
 
@@ -461,6 +499,20 @@ function quizzAbandon(obj, id) {
         "GAME_STATUS": "finished",
         "GAME_WINNER": "ABANDON"
     });
+}
+
+function moveToArchivedRooms(obj, id) {
+    /*
+        Receives an object with the room and the room's name (id)
+        Moves the room to the archived section (called when game is finished
+    */
+    var newObj = {};
+    newObj[id] = obj;
+    console.log("######################");
+    console.log("moveToARvhicedRooms: " + JSON.stringify(newObj));
+    console.log("######################");
+    db.ref("/archivedRooms").update(newObj);
+    db.ref("/rooms").child(id).remove();
 }
 
 function formatString(str) {
@@ -490,7 +542,6 @@ function addToPlayer(playerId, propriety, value) {
 //QUIZZ SECTION
 var refQuizzes = db.ref("/quizzes");
 refQuizzes.on("value", function(snapshot) {
-    console.log("QUIZZ Section Updated");
     quizzesObject = snapshot.val();
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
@@ -553,7 +604,6 @@ judgePendingQuizz = function(obj) {
 //PENDING QUIZZ SECTION
 var refPendingQuizzes = db.ref("/").child('pendingQuizzes');
 refPendingQuizzes.on("value", function(snapshot) {
-    console.log("pendingQUIZZ Section Updated");
     pendingQuizzesObject = snapshot.val();
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
@@ -562,7 +612,6 @@ refPendingQuizzes.on("value", function(snapshot) {
 //STATS SECTION
 var refStats = db.ref("/stats");
 refStats.on("value", function(snapshot) {
-    console.log("STATS Section Updated");
     statsObject = snapshot.val();
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
@@ -572,8 +621,12 @@ function randomFunction(chance) {
     return (Math.floor(Math.random() * 100) + 1) >= chance ;
 }
 
+function timeOutSystem() {
+    processQueueEntries(queueObject);
+    setTimeout(timeOutSystem, 5000);
+}
 
-
+setTimeout(timeOutSystem(), 10000);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
