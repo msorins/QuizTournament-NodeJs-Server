@@ -66,6 +66,14 @@ roomObject = {};
 queueObject = {};
 aiNames = ['Jon', 'Bob', 'Dan', 'Santo', 'Bill', 'McD', 'ProP', 'Luke'];
 
+//STATS SECTION
+var refStats = db.ref("/stats");
+refStats.on("value", function(snapshot) {
+    statsObject = snapshot.val();
+}, function(errorObject) {
+    console.log("The read failed: " + errorObject.code);
+});
+
 //USER SECTION
 var refQuizzes = db.ref("/connectedUsers");
 refQuizzes.on("value", function(snapshot) {
@@ -271,6 +279,7 @@ function twoPlayersQueueEntries(obj) {
 var refRooms = db.ref("/rooms");
 refRooms.on("value", function(snapshot) {
     var obj = snapshot.val();
+    roomObject = obj;
     if (!waitFindAndComputeRooms) {
         waitFindAndComputeRooms = true;
         findAndComputeRooms(obj);
@@ -280,7 +289,6 @@ refRooms.on("value", function(snapshot) {
 
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
-    roomObject = snapshot.val();
 });
 
 
@@ -609,21 +617,19 @@ refPendingQuizzes.on("value", function(snapshot) {
     console.log("The read failed: " + errorObject.code);
 });
 
-//STATS SECTION
-var refStats = db.ref("/stats");
-refStats.on("value", function(snapshot) {
-    statsObject = snapshot.val();
-}, function(errorObject) {
-    console.log("The read failed: " + errorObject.code);
-});
-
 function randomFunction(chance) {
     return (Math.floor(Math.random() * 100) + 1) >= chance ;
 }
 
 function timeOutSystem() {
     processQueueEntries(queueObject);
-    setTimeout(timeOutSystem, 5000);
+    console.log("waitFindAndComputeRooms: " + waitFindAndComputeRooms);
+    if (!waitFindAndComputeRooms) {
+        waitFindAndComputeRooms = true;
+        findAndComputeRooms(roomObject);
+        waitFindAndComputeRooms = false;
+    }
+    setTimeout(timeOutSystem, 3000);
 }
 
 setTimeout(timeOutSystem(), 10000);
