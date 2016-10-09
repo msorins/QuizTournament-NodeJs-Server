@@ -633,7 +633,7 @@ function timeOutSystem() {
         findAndComputeRooms(roomObject);
         waitFindAndComputeRooms = false;
     }
-    setTimeout(timeOutSystem, 3000);
+    setTimeout(timeOutSystem(), 3000);
 }
 
 setTimeout(timeOutSystem(), 10000);
