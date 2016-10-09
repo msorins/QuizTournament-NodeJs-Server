@@ -387,8 +387,11 @@ function twoPlayersGameCompute(obj, crt) {
             quizzAbandon(obj[crt], crt);
     }
 
+
     //MOVE FINISHED ROOMS TO ARCHIVE
     if (obj[crt].GAME_STATUS == "finished" && obj[crt].PLAYER1_STATUS == "exited" && obj[crt].PLAYER2_STATUS == "exited")
+        moveToArchivedRooms(obj[crt], crt);
+    if(obj[crt].GAME_STATUS == "finished" && obj[crt].GAME_WINNER == "ABANDON" && (obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS))
         moveToArchivedRooms(obj[crt], crt);
 }
 
