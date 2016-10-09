@@ -625,7 +625,7 @@ function randomFunction(chance) {
     return (Math.floor(Math.random() * 100) + 1) >= chance ;
 }
 
-function timeOutSystem() {
+setInterval(function() {
     processQueueEntries(queueObject);
     console.log("waitFindAndComputeRooms: " + waitFindAndComputeRooms);
     if (!waitFindAndComputeRooms) {
@@ -633,10 +633,8 @@ function timeOutSystem() {
         findAndComputeRooms(roomObject);
         waitFindAndComputeRooms = false;
     }
-    setTimeout(timeOutSystem(), 3000);
-}
+}, 3000);
 
-setTimeout(timeOutSystem(), 10000);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
