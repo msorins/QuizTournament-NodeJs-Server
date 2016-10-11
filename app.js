@@ -347,8 +347,11 @@ function AiGameCompute(obj, crt) {
         //Call the next roung
         quizzEndRound(obj[crt], crt, winsPlayer1, winsPlayer2);
     }
-    if (obj[crt].GAME_STATUS == "finished" && obj[crt].PLAYER1_STATUS == "exited")
+    if (obj[crt].GAME_STATUS == "finished" || obj[crt].PLAYER1_STATUS == "exited")
         moveToArchivedRooms(obj[crt], crt);
+
+    if (obj[crt].GAME_STATUS != "finished" && parseInt(Date.now()) - parseInt(usersObject[obj[crt].PLAYER1_ID].TIME) >= 8000)
+        quizzAbandon(obj[crt], crt);
 }
 
 function twoPlayersGameCompute(obj, crt) {
