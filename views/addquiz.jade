@@ -5,9 +5,19 @@ block content
     h1 Add a quiz !
     div.thumbnail(style="padding:15px")
       form(action="/add", method="post", style="margin-top:50px", enctype="multipart/form-data")
-        div.form-group(style="margin-left:10px;")
-          label(for="quizImg") File input
-          input(type="file", name="quizImg")
+        div.row
+          div.col-md-6
+            div.form-group(style="margin-left:10px;")
+              label(for="quizImg") File input
+              input(type="file", name="quizImg")
+
+          div.col-md-6
+            div.form-group(style="margin-left:10px;")
+              label(for="quizzCategory") Quiz Category
+              select.form-control(name="quizzCategory", style="width:90%")
+                -for(crt in categoriesObject){
+                  option(value="#{categoriesObject[crt]}") #{categoriesObject[crt]}
+                -}
 
         div.caption
           div.input-group.input-group-lg

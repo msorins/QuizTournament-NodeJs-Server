@@ -5,13 +5,22 @@ block content
     h1 Import quizzes !
     div.thumbnail(style="padding:15px")
       form(action="/import", method="post", style="margin-top:50px", enctype="multipart/form-data")
-        div.form-group(style="margin-left:10px;")
-          label(for="quizImg") File input
-          input(type="file", name="quizImg", multiple="multiple")
+        div.row
+          div.col-md-6
+            div.form-group(style="margin-left:10px;")
+              label(for="quizImg") File input
+              input(type="file", name="quizImg", multiple="multiple")
 
-          br
+          div.col-md-6
+            div.form-group(style="margin-left:10px;")
+              label(for="quizCategory") Quiz Category
+              select.form-control(name="quizCategory", style="width:90%")
+                -for(crt in categoriesObject){
+                  option(value="#{categoriesObject[crt]}") #{categoriesObject[crt]}
+                -}
+        br
 
-          div.btn-group.btn-group-justified(role="group")
-            div.btn-group(role="group")
-              button.btn.btn-default(name="action", value="ok")
-                span.glyphicon.glyphicon-ok
+        div.btn-group.btn-group-justified(role="group")
+          div.btn-group(role="group")
+            button.btn.btn-default(name="action", value="ok")
+              span.glyphicon.glyphicon-ok
