@@ -65,7 +65,10 @@ usersObject = {};
 statsObject = {};
 roomObject = {};
 queueObject = {};
+categoriesObject = {};
 aiNames = ['Jon', 'Bob', 'Dan', 'Santo', 'Bill', 'McD', 'ProP', 'Luke'];
+
+
 
 //STATS SECTION
 var refStats = db.ref("/stats");
@@ -637,6 +640,16 @@ setInterval(function() {
         waitFindAndComputeRooms = false;
     }
 }, 3000);
+
+
+  //CATEGORIES SECTION
+  var refCategories = db.ref("/categories");
+  refCategories.on("value", function(snapshot) {
+      categoriesObject = snapshot.val();
+  }, function(errorObject) {
+      console.log("The read failed: " + errorObject.code);
+  });
+
 
 
 // catch 404 and forward to error handler

@@ -79,8 +79,9 @@ function sendUploadToGCS (req, res, next) {
 
      newQuizObj = {};
      newQuizObj.ANSWER =  answer;
-     newQuizObj.URL = getPublicUrl(gcsname);;
+     newQuizObj.URL = getPublicUrl(gcsname);
      newQuizObj.BY = "admin";
+     newQuizObj.CATEGORY = req.body.quizCategory;
 
      db.ref("/quizzes").child(auxNRQUIZZES).update(newQuizObj);
   }
