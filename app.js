@@ -96,10 +96,21 @@ var waittwoPlayersQueueEntries = false,
 //Async call when a users enter in queue
 ref.on("value", function(snapshot) {
     var obj = snapshot.val();
-    queueObject = obj;
+    var auxObject = snapshot.val();
+    //CREATE THE queueObject with the following form obj[category][LIST_OF_QUIZZES]
+    queueObject = {};
+    for(key in auxObject) {
+        if(auxObject[key].CATEGORY in queueObject)
+            queueObject[auxObject[key].CATEGORY][key] = auxObject[key];
+        else {
+            queueObject[auxObject[key].CATEGORY] = {};
+            queueObject[auxObject[key].CATEGORY][key] = auxObject[key];
+        }
+    }
+    console.log(JSON.stringify(queueObject));
     //If the function is not alreday processing
     if (waittwoPlayersQueueEntries == false)
-        processQueueEntries(obj);
+        processQueueEntries(queueObject);
 
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
@@ -123,17 +134,27 @@ function validateQueueEntries(obj) {
     */
     console.log("validateQueueEntries function called");
     if (obj != null ) {
-        for (var i in obj) {
-            var userTimeStamp = parseInt(usersObject[i].TIME);
-            var currentTimeStamp = parseInt(Date.now());
-            var differenceTimeStamp = currentTimeStamp - userTimeStamp;
-            console.log(differenceTimeStamp);
-            if (differenceTimeStamp >= 8000) {
-                console.log(`Queue with user id ${i} removed - Timeout`);
-                db.ref("/queue").child(i).remove();
-                obj[i] = null;
+        //Parse all the categories
+        for (var category in obj)
+        {
+            //Parse all the categories in queueObject
+            for(var userID in obj[category]) {
+                //Parse all the userIDs in queueObject
+                if(obj[category][userID] == null)
+                    continue;
+                var userTimeStamp = parseInt(usersObject[userID].TIME);
+                var currentTimeStamp = parseInt(Date.now());
+                var differenceTimeStamp = currentTimeStamp - userTimeStamp;
+                console.log(differenceTimeStamp);
+                if (differenceTimeStamp >= 8000) {
+                    console.log(`Queue with user id ${userID} removed - Timeout`);
+                    db.ref("/queue").child(userID).remove();
+                    obj[category][userID] = null;
+                }
+
             }
         }
+
     }
     return obj;
 }
@@ -145,53 +166,69 @@ function AiQueueEntries(obj) {
     */
     console.log("AiQueueEntries function called");
     if( obj != null ) {
-        for (var key in obj) {
-            if (obj[key] == null)
-                continue;
+        //Parse all the categories in queueObject
+        for (var category in obj)
+        {
+            //Parse all the userIDs in queueObject
+            for(var userID in obj[category]) {
+                if(obj[category][userID] == null)
+                    continue;
 
-            var userTimeStamp = parseInt(obj[key].ENTERTIME);
-            var currentTimeStamp = parseInt(Date.now());
-            var differenceTimeStamp = currentTimeStamp - userTimeStamp;
-            if (differenceTimeStamp >= 8000) {
-                //INITIATING THE QUIZZ WITH AI
-                console.log(`Queue - user with id ${key} is playing with AI`);
-                db.ref("/queue").child(key).remove();
+                var userTimeStamp = parseInt(obj[category][userID].ENTERTIME);
+                var currentTimeStamp = parseInt(Date.now());
+                var differenceTimeStamp = currentTimeStamp - userTimeStamp;
+                if (differenceTimeStamp >= 8000) {
+                    //INITIATING THE QUIZZ WITH AI
+                    console.log(`Queue - user with id ${userID} is playing with AI`);
+                    db.ref("/queue").child(userID).remove();
 
-                var crtRoomID = parseInt(statsObject.NRROOMS);
+                    var crtRoomID = parseInt(statsObject.NRROOMS);
 
-                //Choosing a nickname for the AI
-                var keys = Object.keys(aiNames);
-                var random = Math.floor(Math.random() * keys.length);
+                    //Choosing a nickname for the AI
+                    var keys = Object.keys(aiNames);
+                    var random = Math.floor(Math.random() * keys.length);
 
-                //Setting the new room with one user
-                var roomRef = db.ref("/rooms");
-                roomRef.child(crtRoomID).set({
-                    PLAYER1_ID: key,
-                    PLAYER1_STATUS: "waiting",
-                    PLAYER1_WINS: "0",
-                    PLAYER2_WINS: "0",
-                    GAME_ROUNDS: "1",
-                    GAME_STATUS: "waitingForPlayers",
-                    GAME_MODE: "AI",
-                    AI_NICKNAME: aiNames[random]
-                });
+                    //Setting the new room with one user
+                    var roomRef = db.ref("/rooms");
+
+                    var crtGameCategory = "";
+
+                    if(obj[category][userID].CATEGORY != "random")
+                        crtGameCategory = obj[category][userID].CATEGORY;
+                    else
+                        crtGameCategory = chooseRandomCategory();
 
 
-                //Setting user roomId
-                db.ref("/connectedUsers").child(key).update({
-                    "GAME_ROOM": String(crtRoomID)
-                });
+                    roomRef.child(crtRoomID).set({
+                        PLAYER1_ID: userID,
+                        PLAYER1_STATUS: "waiting",
+                        PLAYER1_WINS: "0",
+                        PLAYER2_WINS: "0",
+                        GAME_ROUNDS: "1",
+                        GAME_STATUS: "waitingForPlayers",
+                        GAME_MODE: "AI",
+                        GAME_CATEGORY: crtGameCategory,
+                        AI_NICKNAME: aiNames[random],
+                    });
 
-                //Withdraw QP from players
-                addToPlayer(key, "QP", -10);
 
-                //Incrementing stats NR ROOMS number
-                db.ref("/stats").update({
-                    "NRROOMS": (crtRoomID + 1).toString()
-                });
+                    //Setting user roomId
+                    db.ref("/connectedUsers").child(userID).update({
+                        "GAME_ROOM": String(crtRoomID)
+                    });
 
-                //Deleting the object
-                obj[key] = null;
+                    //Withdraw QP from players
+                    addToPlayer(userID, "QP", -10);
+
+                    //Incrementing stats NR ROOMS number
+                    db.ref("/stats").update({
+                        "NRROOMS": (crtRoomID + 1).toString()
+                    });
+
+                    //Deleting the object
+                    obj[category][userID] = null;
+                }
+
             }
         }
     }
@@ -199,6 +236,11 @@ function AiQueueEntries(obj) {
     return obj;
 }
 
+function chooseRandomCategory() {
+    var keys = Object.keys(categoriesObject);
+    var random = Math.floor(Math.random() * keys.length);
+    return categoriesObject[random];
+}
 
 //Make ROOMS
 function twoPlayersQueueEntries(obj) {
@@ -207,77 +249,96 @@ function twoPlayersQueueEntries(obj) {
     Extract pairs of two users and put them in a queue
     */
     console.log("twoPlayersQueueEntries function called");
-    if (obj != null) {
-        console.log(JSON.stringify(obj));
-        var nrOfQueueUsers = Object.keys(obj).length;
-        console.log("Number of queue users: ", nrOfQueueUsers);
 
-        while (nrOfQueueUsers >= 2) {
-            var key1 = null,
-                key2 = null;
+    if (obj != null ) {
+        //Parse all the categories in queueObject
+        for (var category in obj)
+        {
+            //Parse all the userIDs in queueObject
+            if(obj[category] == null)
+                continue;
+            var nrOfQueueUsers = Object.keys(obj[category]).length;
 
-            nrOfQueueUsers = 0;
-            for (var key in obj) {
-                if (obj[key] == null)
-                    continue;
+            console.log("Category: " + category + ", nrOfQueueUsers" + String(nrOfQueueUsers));
+            while (nrOfQueueUsers >= 2) {
+                var key1 = null,
+                    key2 = null;
 
-                nrOfQueueUsers++;
+                nrOfQueueUsers = 0;
 
-                //Choose the two players
-                if (key1 == null)
-                    key1 = key;
-                else {
-                    key2 = key;
-                    break;
+                for(var userID in obj[category]) {
+
+                    if(obj[category][userID] == null)
+                        continue;
+
+                    nrOfQueueUsers++;
+
+                    //Choose the two players
+                    if (key1 == null)
+                        key1 = userID;
+                    else {
+                        key2 = userID;
+                        break;
+                    }
+                }
+
+                if (key1 != null && key2 != null) {
+                    var crtRoomID = parseInt(statsObject.NRROOMS);
+
+                    var crtGameCategory = '';
+                    if(category != "random")
+                        crtGameCategory = obj[category][userID].CATEGORY;
+                    else
+                        crtGameCategory = chooseRandomCategory();
+
+                    //Setting the new room with two users
+                    var roomRef = db.ref("/rooms");
+                    roomRef.child(crtRoomID).set({
+                        PLAYER1_ID: key1,
+                        PLAYER2_ID: key2,
+                        PLAYER1_STATUS: "waiting",
+                        PLAYER2_STATUS: "waiting",
+                        PLAYER1_WINS: "0",
+                        PLAYER2_WINS: "0",
+                        GAME_ROUNDS: "1",
+                        GAME_STATUS: "waitingForPlayers",
+                        GAME_MODE: "twoPlayers",
+                        GAME_CATEGORY: crtGameCategory
+                    });
+
+                    //Setting user roomId
+                    db.ref("/connectedUsers").child(key1).update({
+                        "GAME_ROOM": String(crtRoomID)
+                    });
+                    db.ref("/connectedUsers").child(key2).update({
+                        "GAME_ROOM": String(crtRoomID)
+                    });
+
+                    //Withdraw QP from players
+                    addToPlayer(key1, "QP", -10);
+                    addToPlayer(key2, "QP", -10);
+
+                    //Deleting selected users from queue
+                    var deleteRef = db.ref("/queue").child(key1);
+                    deleteRef.remove();
+                    obj[key1] = null;
+                    var deleteRef = db.ref("/queue").child(key2);
+                    deleteRef.remove();
+                    obj[key2] = null;
+
+
+                    nrOfQueueUsers -= 2;
+                    db.ref("/stats").update({
+                        "NRROOMS": (crtRoomID + 1).toString()
+                    });
                 }
             }
 
-            if (key1 != null && key2 != null) {
-                var crtRoomID = parseInt(statsObject.NRROOMS);
-
-                //Setting the new room with two users
-                var roomRef = db.ref("/rooms");
-                roomRef.child(crtRoomID).set({
-                    PLAYER1_ID: key1,
-                    PLAYER2_ID: key2,
-                    PLAYER1_STATUS: "waiting",
-                    PLAYER2_STATUS: "waiting",
-                    PLAYER1_WINS: "0",
-                    PLAYER2_WINS: "0",
-                    GAME_ROUNDS: "1",
-                    GAME_STATUS: "waitingForPlayers",
-                    GAME_MODE: "twoPlayers"
-                });
-
-                //Setting user roomId
-                db.ref("/connectedUsers").child(key1).update({
-                    "GAME_ROOM": String(crtRoomID)
-                });
-                db.ref("/connectedUsers").child(key2).update({
-                    "GAME_ROOM": String(crtRoomID)
-                });
-
-                //Withdraw QP from players
-                addToPlayer(key1, "QP", -10);
-                addToPlayer(key2, "QP", -10);
-
-                //Deleting selected users from queue
-                var deleteRef = db.ref("/queue").child(key1);
-                deleteRef.remove();
-                obj[key1] = null;
-                var deleteRef = db.ref("/queue").child(key2);
-                deleteRef.remove();
-                obj[key2] = null;
-
-
-                nrOfQueueUsers -= 2;
-                db.ref("/stats").update({
-                    "NRROOMS": (crtRoomID + 1).toString()
-                });
-            }
         }
+
     }
 }
+
 
 //ROOMS SECTION
 var refRooms = db.ref("/rooms");
@@ -333,8 +394,10 @@ function AiGameCompute(obj, crt) {
         var winsPlayer1 = parseInt(obj[crt].PLAYER1_WINS);
         var winsPlayer2 = parseInt(obj[crt].PLAYER2_WINS);
 
-        var answer = formatString(quizzesObject[obj.GAME_QUIZZ]);
-        var answerPlayer1 = formatString(obj.PLAYER1_RESULT);
+        var answer = formatString(quizzesObject[obj[crt].GAME_CATEGORY][obj[crt].GAME_QUIZZ].ANSWER);
+        console.log("CORRECT ANSWER: " + answer);
+        var answerPlayer1 = formatString(obj[crt].PLAYER1_RESULT);
+        console.log("Player1 ANSWER: " + answerPlayer1);
 
         if(aiWon == true)
             winsPlayer2++;
@@ -404,19 +467,28 @@ function twoPlayersGameCompute(obj, crt) {
 
 
 function quizzPreparing(obj, id) {
-    var keys = Object.keys(quizzesObject);
+
+    console.log("GAME OBJECT: " + JSON.stringify(obj));
+    if(quizzesObject[obj.GAME_CATEGORY] == null) {
+        console.log("Error quizzPreparing, object null")
+        return ;
+    }
+
+    var keys = Object.keys(quizzesObject[obj.GAME_CATEGORY]);
     var random = Math.floor(Math.random() * keys.length);
+
     var chosenQuizz = keys[random];
+
     var gameRounds = parseInt(obj.GAME_ROUNDS)
     console.log("quizzPreparing - room: " + id + " - round: " + gameRounds);
-
+    console.log("chosenQuizz: ", chosenQuizz);
     //RUN THE GAME
     var crtTime = new Date().toLocaleString();
     db.ref("/rooms").child(id).update({
         "GAME_STATUS": "preparing",
         "GAME_QUIZZ": String(chosenQuizz),
         "GAME_ROUNDS": String(gameRounds + 1),
-        "GAME_ANSWERLETTERS": quizzesObject[chosenQuizz].ANSWER.length
+        "GAME_ANSWERLETTERS": quizzesObject[obj.GAME_CATEGORY][chosenQuizz].ANSWER.length
     });
 }
 
@@ -560,7 +632,17 @@ function addToPlayer(playerId, propriety, value) {
 //QUIZZ SECTION
 var refQuizzes = db.ref("/quizzes");
 refQuizzes.on("value", function(snapshot) {
-    quizzesObject = snapshot.val();
+    var auxObject = snapshot.val();
+    //CREATE THE quizzesObject with the following form obj[category][LIST_OF_QUIZZES]
+    quizzesObject = {};
+    for(key in auxObject) {
+        if(auxObject[key].CATEGORY in quizzesObject)
+            quizzesObject[auxObject[key].CATEGORY][key] = auxObject[key];
+        else {
+            quizzesObject[auxObject[key].CATEGORY] = {};
+            quizzesObject[auxObject[key].CATEGORY][key] = auxObject[key];
+        }
+    }
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
