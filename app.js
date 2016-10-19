@@ -66,6 +66,7 @@ statsObject = {};
 roomObject = {};
 queueObject = {};
 categoriesObject = {};
+archivedRoomsObject = {}
 aiNames = ['Jon', 'Bob', 'Dan', 'Santo', 'Bill', 'McD', 'ProP', 'Luke'];
 
 
@@ -74,6 +75,14 @@ aiNames = ['Jon', 'Bob', 'Dan', 'Santo', 'Bill', 'McD', 'ProP', 'Luke'];
 var refStats = db.ref("/stats");
 refStats.on("value", function(snapshot) {
     statsObject = snapshot.val();
+}, function(errorObject) {
+    console.log("The read failed: " + errorObject.code);
+});
+
+//ARCHIVED ROOMS SECTION
+var refArchivedRooms = db.ref("/").child('archivedRooms');
+refArchivedRooms.on("value", function(snapshot) {
+    archivedRoomsObject = snapshot.val();
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
@@ -363,6 +372,10 @@ function findAndComputeRooms(obj) {
     */
     console.log("findAndComputeRooms called");
     for (crt in obj) {
+        if(crt in archivedRoomsObject) {
+            db.ref("/rooms").child(crt).remove();
+            continue;
+        }
         if( obj[crt].GAME_MODE == "twoPlayers" )
             twoPlayersGameCompute(obj, crt);
         if( obj[crt].GAME_MODE == "AI" )
@@ -382,6 +395,10 @@ function AiGameCompute(obj, crt) {
     if(obj[crt].GAME_STATUS == "running" && obj[crt].PLAYER1_STATUS == "done") {
         var userAnswerTime = parseFloat(obj[crt].PLAYER1_TIMER);
         var aiWon = false;
+
+        var gamePlayer1RoundMessage = "", gamePlayer2RoundMessage = "";
+        var gameRoundWinner = "";
+
         if(userAnswerTime >= 15.00)
             aiWon = randomFunction(20);
         if(userAnswerTime >= 10.00)
@@ -400,14 +417,31 @@ function AiGameCompute(obj, crt) {
         console.log("Player1 ANSWER: " + answerPlayer1);
 
         if(aiWon == true)
+        {
             winsPlayer2++;
-        else
+            gameRoundWinner="Player2";
             if(answerPlayer1 == answer)
+                gamePlayer1RoundMessage = "Correct but slower answer";
+            else
+                gamePlayer1RoundMessage = "Wrong answer";
+        }
+        else
+            if(answerPlayer1 == answer) {
                 winsPlayer1++;
+                gameRoundWinner="Player1";
+                if(randomFunction(50))
+                    gamePlayer1RoundMessage = "Correct and faster answer";
+                else
+                    gamePlayer1RoundMessage = "Correct answer";
+            }
+            else
+                gamePlayer1RoundMessage = "Wrong answer";
 
         db.ref("/rooms").child(crt).update({
             "PLAYER1_WINS": String(winsPlayer1),
-            "PLAYER2_WINS": String(winsPlayer2)
+            "PLAYER2_WINS": String(winsPlayer2),
+            "GAME_ROUND_WINNER": gameRoundWinner,
+            "GAME_PLAYER1_ROUND_MESSAGE": gamePlayer1RoundMessage
         });
 
         //Call the next roung
@@ -519,28 +553,40 @@ function quizzRunning(obj, id) {
         var winsPlayer2 = parseInt(obj.PLAYER2_WINS);
         var winnerId = 0;
 
+        var gamePlayer1RoundMessage = "", gamePlayer2RoundMessage = "";
+        var gameRoundWinner = "";
+
         //Choose the winner
         if (answerPlayer1 == answerPlayer2 && answerPlayer1 == answer) {
+            gamePlayer1RoundMessage = gamePlayer2RoundMessage = "Correct but slower answer";
             if (timerPlayer1 > timerPlayer2)
-                winnerId = 1;
+                winnerId = 1, gamePlayer1RoundMessage = "Correct and faster answer";
             else
-                winnerId = 2;
+                winnerId = 2, gamePlayer2RoundMessage = "Correct and faster answer";
         } else {
+            gamePlayer1RoundMessage = gamePlayer2RoundMessage = "Wrong answer";
             if (answerPlayer1 == answer)
-                winnerId = 1;
+                winnerId = 1, gamePlayer1RoundMessage = "Correct answer";
 
             if (answerPlayer2 == answer)
-                winnerId = 2;
+                winnerId = 2, gamePlayer2RoundMessage = "Correct answer";
         }
 
-        if (winnerId == 1)
+        if (winnerId == 1) {
+            gameRoundWinner = "PLAYER1";
             winsPlayer1++;
-        else
+        }
+        else {
+            gameRoundWinner = "PLAYER2";
             winsPlayer2++;
+        }
 
         db.ref("/rooms").child(id).update({
             "PLAYER1_WINS": String(winsPlayer1),
-            "PLAYER2_WINS": String(winsPlayer2)
+            "PLAYER2_WINS": String(winsPlayer2),
+            "GAME_ROUND_WINNER": gameRoundWinner,
+            "GAME_PLAYER1_ROUND_MESSAGE": gamePlayer1RoundMessage,
+            "GAME_PLAYER2_ROUND_MESSAGE": gamePlayer2RoundMessage
         });
 
         quizzEndRound(obj, id, winsPlayer1, winsPlayer2);
@@ -708,6 +754,7 @@ refPendingQuizzes.on("value", function(snapshot) {
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
+
 
 function randomFunction(chance) {
     return (Math.floor(Math.random() * 100) + 1) >= chance ;
