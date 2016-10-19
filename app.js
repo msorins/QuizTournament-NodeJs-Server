@@ -599,7 +599,7 @@ function quizzRunning(obj, id) {
 function quizzEndRound(obj, id, winsPlayer1, winsPlayer2) {
     var rounds = parseInt(obj.GAME_ROUNDS);
 
-    if (rounds <= 2 || (rounds > 2 && winsPlayer1 == winsPlayer2)) {
+    if (rounds <= 5 || (rounds > 5 && winsPlayer1 == winsPlayer2)) {
         db.ref("/rooms").child(id).update({
             "GAME_STATUS": "waitingForPlayers",
             "PLAYER1_STATUS": "waiting",
