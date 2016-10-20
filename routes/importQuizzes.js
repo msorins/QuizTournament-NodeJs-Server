@@ -60,23 +60,42 @@ function sendUploadToGCS (req, res, next) {
      stream.end(req.files[i].buffer);
 
      //DATABASE UPLOAD SECTION
-     var ok = false;
-     var answer = '';
+
+     //Regex to allow custom name formats
+     var regexNumberedWithDash = new RegExp("^[\d]+-[a-z]+.[a-z]+$");
+     var regexSimple = new RegExp("^[a-z|A-Z]+.[a-z]+$");
+
      var originalName = req.files[i].originalname.toString();
+     var answer = '';
 
-     for(j = 0; j<originalName.length; j++) {
-         if(originalName[j] == '-'){
-             ok = true;
-             continue;
+     //Form: 01-cola.jpg
+     if(regexNumberedWithDash.test(originalName)) {
+         var ok = false;
+         for(var j = 0; j<originalName.length; j++) {
+             if(originalName[j] == '-'){
+                 ok = true;
+                 continue;
+             }
+
+             if(originalName[j] == '.')
+                break;
+
+            if(ok)
+              answer += originalName[j];
          }
-
-         if(originalName[j] == '.')
-            break;
-
-        if(ok)
-          answer += originalName[j];
      }
 
+     //Form: cola.jpg
+    if(regexSimple.test(originalName)) {
+        for(var j = 0; j<originalName.length; j++) {
+            if(originalName[j] == '.')
+                break;
+
+            answer += originalName[j];
+        }
+    }
+
+     //Actually upload part
      newQuizObj = {};
      newQuizObj.ANSWER =  answer;
      newQuizObj.URL = getPublicUrl(gcsname);
