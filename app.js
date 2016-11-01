@@ -131,7 +131,8 @@ function processQueueEntries(obj) {
 
     obj = validateQueueEntries(obj);
     obj = AiQueueEntries(obj);
-    twoPlayersQueueEntries(obj);
+    obj = twoPlayersQueueEntries(obj);
+    obj = tournamentQueueEntries(obj, 8);
 
     waittwoPlayersQueueEntries = false;
 }
@@ -149,8 +150,9 @@ function validateQueueEntries(obj) {
             //Parse all the categories in queueObject
             for(var userID in obj[category]) {
                 //Parse all the userIDs in queueObject
-                if(obj[category][userID] == null)
+                if(obj[category][userID] == null || obj[category][userID].NATURE == "bot")
                     continue;
+
                 var userTimeStamp = parseInt(usersObject[userID].TIME);
                 var currentTimeStamp = parseInt(Date.now());
                 var differenceTimeStamp = currentTimeStamp - userTimeStamp;
@@ -182,11 +184,14 @@ function AiQueueEntries(obj) {
             for(var userID in obj[category]) {
                 if(obj[category][userID] == null)
                     continue;
+                if(obj[category][userID].type != "newGameTwoRequest" )
+                    continue;
 
                 var userTimeStamp = parseInt(obj[category][userID].ENTERTIME);
                 var currentTimeStamp = parseInt(Date.now());
                 var differenceTimeStamp = currentTimeStamp - userTimeStamp;
-                if (differenceTimeStamp >= 8000) {
+                //If the user is already in queue for 4 seconds, than initiate a AI game
+                if (differenceTimeStamp >= 4000) {
                     //INITIATING THE QUIZZ WITH AI
                     console.log(`Queue - user with id ${userID} is playing with AI`);
                     db.ref("/queue").child(userID).remove();
@@ -282,6 +287,9 @@ function twoPlayersQueueEntries(obj) {
 
                     nrOfQueueUsers++;
 
+                    if(obj[category][userID].type != "newGameTwoRequest" )
+                        continue;
+
                     //Choose the two players
                     if (key1 == null)
                         key1 = userID;
@@ -346,8 +354,124 @@ function twoPlayersQueueEntries(obj) {
         }
 
     }
+    return obj;
 }
 
+addFakeQueueUsers(7);
+
+function tournamentQueueEntries(obj, numberOfPlayers) {
+    /*
+    Received an validated object with all users in queue
+    Extract pairs of two users and put them in a queue
+    */
+    console.log("tournamentQueueEntries function called");
+
+    if (obj != null ) {
+        //Parse all the categories in queueObject
+
+        for (var category in obj)
+        {
+            //Parse all the userIDs in queueObject
+            if(obj[category] == null)
+                continue;
+
+            console.log("YAAAAS");
+            var nrOfQueueUsers = Object.keys(obj[category]).length;
+
+            playersKey = [];
+
+            while (nrOfQueueUsers >= numberOfPlayers) {
+                nrOfQueueUsers = 0;
+
+                for(var userID in obj[category]) {
+
+                    if(obj[category][userID] == null)
+                        continue;
+
+                    nrOfQueueUsers++;
+
+                    if( !(numberOfPlayers == 8 && obj[category][userID].type == "newGameTournamentEightRequest") )
+                        continue;
+
+                    //Choose <numberOfPlayers> players
+                    playersKey.push(userID);
+                    if(playersKey.length >= numberOfPlayers)
+                        break;
+                }
+
+                //Check if there are really enough valid players to create the tournamentRoom
+                ok = true
+                for(i = 0; i < numberOfPlayers; i++)
+                    if(playersKey[i] == null) {
+                        ok = false;
+                        break;
+                    }
+
+                if (ok == true) {
+                    var crtTournamentID = parseInt(statsObject.NRTOURNAMENTS);
+
+                    var crtGameCategory = '';
+                    if(category != "random")
+                        crtGameCategory = obj[category][userID].CATEGORY;
+                    else
+                        crtGameCategory = chooseRandomCategory();
+
+                    //Setting the new tournament room with users
+                    var tournamentRef = db.ref("/tournaments");
+
+                    //Setting the new tournament values
+                    var newTournamentObj = {};
+
+                    var auxPlayersScore = [];
+                    for(i = 0; i < numberOfPlayers; i++) {
+                        var auxObj = {};
+                        auxObj[playersKey[1]] = 0;
+                        auxPlayersScore.push(auxObj);
+                    }
+
+
+                    if(numberOfPlayers == 8)
+                        newTournamentObj.GAME_TYPE = "newGameTournamentEightRequest"
+                    newTournamentObj.PLAYERS = playersKey;
+                    newTournamentObj.ACTIVE_PLAYERS = playersKey;
+                    newTournamentObj.PLAYERS_SCORE = auxPlayersScore;
+                    newTournamentObj.ROOMS = [];
+
+                    tournamentRef.child(crtTournamentID).set(newTournamentObj);
+
+                    //Withdraw QP from players
+                    for(i = 0; i < numberOfPlayers; i++)
+                        addToPlayer(playersKey[i], "QP", -10);
+
+                    //Deleting selected users from queue
+                    for(i = 0; i < numberOfPlayers; i++) {
+                        db.ref("/queue").child(playersKey[i]).remove();
+                    }
+
+                    nrOfQueueUsers -= numberOfPlayers;
+
+                    //Incrementing stats number
+                    db.ref("/stats").update({
+                        "NRTOURNAMENTS": (crtTournamentID + 1).toString()
+                    });
+                }
+            }
+        }
+    }
+    return obj;
+}
+
+function addFakeQueueUsers(nr) {
+    console.log(`addFakeQueueUsers called, ${nr} bots added in the queue`)
+    for(i=1; i<=nr; i++) {
+        db.ref("/queue").child(i.toString()).set({
+            "type": "newGameTournamentEightRequest",
+            "NATURE" : "bot",
+            "CATEGORY" : "random"
+        });
+
+    }
+}
 
 //ROOMS SECTION
 var refRooms = db.ref("/rooms");
@@ -364,7 +488,6 @@ refRooms.on("value", function(snapshot) {
 }, function(errorObject) {
     console.log("The read failed: " + errorObject.code);
 });
-
 
 function findAndComputeRooms(obj) {
     /*
@@ -498,7 +621,6 @@ function twoPlayersGameCompute(obj, crt) {
     if(obj[crt].GAME_STATUS == "finished" && obj[crt].GAME_WINNER == "ABANDON" && (obj[crt].PLAYER1_STATUS == "exited" || obj[crt].PLAYER2_STATUS))
         moveToArchivedRooms(obj[crt], crt);
 }
-
 
 function quizzPreparing(obj, id) {
 
